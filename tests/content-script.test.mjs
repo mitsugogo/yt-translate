@@ -84,6 +84,9 @@ test("classic content bundle mounts the panel before metadata and accepts transl
   assert.equal(inserted.host.tag, "yt-local-translator");
   assert.match(markup, /リアルタイム翻訳/);
   assert.match(markup, /<style>/);
+  assert.match(markup, /:host-context\(html\[dark\]\) \.panel/);
+  assert.match(markup, /--yt-spec-text-primary/);
+  assert.doesNotMatch(markup, /prefers-color-scheme/);
   assert.doesNotMatch(markup, /data-action="toggle"/);
   assert.doesNotMatch(markup, />開始</);
   assert.match(markup, /音声を待っています/);

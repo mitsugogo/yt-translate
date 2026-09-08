@@ -1,5 +1,5 @@
 import { MessageType } from "../shared/messages.js";
-import { DEFAULT_SETTINGS, formatLanguageDirection, getTargetLanguageForSource, normalizeSettings } from "../shared/settings.js";
+import { DEFAULT_SETTINGS, formatActiveTranslationStatus, formatLanguageDirection, getTargetLanguageForSource, normalizeSettings } from "../shared/settings.js";
 
 const elements = {
   enabled: document.querySelector("#enabled"),
@@ -19,6 +19,8 @@ const elements = {
 };
 
 let settings = DEFAULT_SETTINGS;
+let detectedLanguage = null;
+let popupTabId = null;
 
 function send(message) {
   return chrome.runtime.sendMessage(message).catch((error) => ({ ok: false, error: error.message }));
@@ -68,7 +70,13 @@ function describeFeatures(features) {
   if (!features.speech?.local || features.speech?.status === "unavailable") return features.speech?.message || "この環境では端末内の音声認識を利用できません。";
   if (!features.translator?.supported || features.translator?.status === "unavailable") return features.translator?.message || "この環境ではChromeの翻訳機能を利用できません。";
   if (features.speech.status !== "available" || features.translator.status !== "available") return "初回利用には音声認識・翻訳モデルの準備が必要です。";
-  return `準備完了 · ${formatLanguageDirection(settings.sourceLanguage, settings.targetLanguage)} · 端末内で処理します。`;
+  return `準備完了 · ${formatLanguageDirection(settings.sourceLanguage, settings.targetLanguage)}`;
+}
+
+function showActiveStatus(nextDetectedLanguage = detectedLanguage) {
+  detectedLanguage = nextDetectedLanguage;
+  const sourceLanguage = detectedLanguage || (settings.sourceLanguage === "auto" ? null : settings.sourceLanguage);
+  elements.status.textContent = formatActiveTranslationStatus(sourceLanguage, settings.targetLanguage);
 }
 
 async function refresh() {
@@ -78,15 +86,21 @@ async function refresh() {
     return;
   }
   applySettings(response.settings);
+  popupTabId = response.tab?.id ?? null;
+  detectedLanguage = response.session?.detectedLanguage || null;
   elements.status.textContent = describeFeatures(response.features);
-  if (response.session) elements.status.textContent = "翻訳中 · YouTubeの音声を端末内で処理しています。";
+  if (response.session) showActiveStatus();
 }
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === MessageType.OFFSCREEN_STATE) {
     if (message.state === "downloading" && elements.error.hidden) setProgress(message.progress, true, message.detail);
-    else if (message.state === "listening" || message.state === "idle" || message.state === "error") setProgress(null, false);
+    else if (message.state === "listening" || message.state === "idle" || message.state === "error") {
+      setProgress(null, false);
+      if (message.state === "listening") showActiveStatus(message.detectedLanguage || detectedLanguage);
+    }
   }
+  if (message.type === MessageType.POPUP_LANGUAGE && message.tabId === popupTabId) showActiveStatus(message.detectedLanguage);
   if (message.type === MessageType.OFFSCREEN_ERROR) {
     setProgress(null, false);
     setError(message.message || "音声認識・翻訳処理に失敗しました。");
@@ -105,7 +119,15 @@ elements.enabled.addEventListener("change", async () => {
   }
   if (response?.settings) applySettings(response.settings);
   if (response?.error) setError(response.error);
-  if (response?.ok) elements.status.textContent = elements.enabled.checked ? "翻訳を開始しました。" : "翻訳を停止しました。";
+  if (response?.ok) {
+    if (elements.enabled.checked) {
+      detectedLanguage = null;
+      showActiveStatus();
+    } else {
+      detectedLanguage = null;
+      elements.status.textContent = "翻訳を停止しました。";
+    }
+  }
   if (!response?.ok || !elements.enabled.checked) setProgress(null, false);
   elements.enabled.disabled = false;
   elements.prepare.disabled = false;
@@ -125,6 +147,10 @@ for (const element of [elements.showOriginal, elements.showTranslation, elements
     const response = await send({ type: MessageType.SETTINGS_UPDATED, patch });
     if (response?.settings) applySettings(response.settings);
     if (!response?.ok) setError(response?.error || "設定を保存できませんでした。");
+    else if (settings.enabled) {
+      if (element === elements.sourceLanguage) detectedLanguage = null;
+      showActiveStatus();
+    }
   });
 }
 

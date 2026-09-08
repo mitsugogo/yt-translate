@@ -9,10 +9,7 @@
   <body>
     <main class="popup">
       <header>
-        <div>
-          <p class="eyebrow">端末内で処理</p>
-          <h1>YouTube Local Translator</h1>
-        </div>
+        <h1>YouTube Local Translator</h1>
         <label class="switch" title="翻訳を有効にする">
           <input id="enabled" type="checkbox" aria-label="翻訳を有効にする" />
           <span class="slider"></span>
@@ -34,7 +31,6 @@
         <label class="font-size">文字サイズ <input id="fontSize" type="range" min="12" max="22" step="1" /></label>
       </section>
       <button id="prepare" class="secondary" type="button">音声認識・翻訳モデルを準備</button>
-      <p class="privacy">音声・文字起こし・翻訳は端末内で処理します。</p>
       <p id="error" class="error" hidden></p>
     </main>
     <script type="module" src="./popup.js"></script>

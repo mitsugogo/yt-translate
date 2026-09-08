@@ -6,6 +6,13 @@ let activeSession = null;
 let sessionLoaded = false;
 let sessionLoadPromise = null;
 let offscreenCreation = null;
+let sessionOperation = Promise.resolve();
+
+function runSessionOperation(operation) {
+  const result = sessionOperation.then(operation, operation);
+  sessionOperation = result.catch(() => undefined);
+  return result;
+}
 
 async function loadSession() {
   if (sessionLoaded) return activeSession;
@@ -53,6 +60,17 @@ async function ensureOffscreenDocument() {
 async function sendToOffscreen(message) {
   await ensureOffscreenDocument();
   return chrome.runtime.sendMessage({ ...message, target: "offscreen" });
+}
+
+async function releaseOrphanedCapture(tabId) {
+  let capturedTabs;
+  try {
+    capturedTabs = await chrome.tabCapture.getCapturedTabs();
+  } catch {
+    return;
+  }
+  if (!capturedTabs.some((capture) => capture.tabId === tabId)) return;
+  await sendToOffscreen({ type: MessageType.OFFSCREEN_STOP });
 }
 
 async function sendToTab(tabId, message) {
@@ -108,6 +126,7 @@ async function startForTab(tabId, requestedVideoId, providedPageContext = null) 
   if (!videoId) return { ok: false, error: "現在のタブでYouTube動画を確認できませんでした。" };
 
   await loadSession();
+  if (currentSessionForTab(tabId, videoId)) return { ok: true };
   const previousSession = activeSession;
   if (previousSession) await stopForTab(previousSession.tabId, previousSession.videoId);
   const settings = await readSettings();
@@ -117,9 +136,14 @@ async function startForTab(tabId, requestedVideoId, providedPageContext = null) 
   const pageContext = await getPageContext(tabId, providedPageContext);
   let streamId;
   try {
+    await ensureOffscreenDocument();
+    await releaseOrphanedCapture(tabId);
     streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Chromeがタブ音声の取得を許可しませんでした。";
+    const detail = error instanceof Error ? error.message : "Chromeがタブ音声の取得を許可しませんでした。";
+    const message = /active stream/i.test(detail)
+      ? "このタブの音声は既に取得中です。数秒待ってから、もう一度有効にしてください。"
+      : detail;
     await sendToTab(tabId, { type: MessageType.OFFSCREEN_ERROR, videoId, code: "capture_denied", message: `タブ音声を取得できませんでした。拡張機能を開いて有効化し直してください。（${message}）` });
     return { ok: false, error: message, code: "capture_denied" };
   }
@@ -128,16 +152,20 @@ async function startForTab(tabId, requestedVideoId, providedPageContext = null) 
   await sendToTab(tabId, { type: MessageType.OFFSCREEN_STATE, state: TranslatorState.INITIALIZING, videoId });
 
   const nextSession = { tabId, videoId, pageContext };
-  await saveSession(nextSession);
   try {
-    const result = await sendToOffscreen({ type: MessageType.START_CAPTURE, tabId, videoId, streamId, settings, pageContext });
+    const [result] = await Promise.all([
+      sendToOffscreen({ type: MessageType.START_CAPTURE, tabId, videoId, streamId, settings, pageContext }),
+      saveSession(nextSession)
+    ]);
     if (!result?.ok) {
+      await sendToOffscreen({ type: MessageType.OFFSCREEN_STOP }).catch(() => undefined);
       await saveSession(null);
       await sendToTab(tabId, { type: MessageType.OFFSCREEN_ERROR, videoId, code: result?.code || "start_failed", message: result?.error || "音声認識・翻訳を開始できませんでした。" });
       return result || { ok: false, error: "音声認識・翻訳を開始できませんでした。" };
     }
     return { ok: true };
   } catch (error) {
+    await sendToOffscreen({ type: MessageType.OFFSCREEN_STOP }).catch(() => undefined);
     await saveSession(null);
     const message = error instanceof Error ? error.message : "音声処理用ページを起動できませんでした。";
     await sendToTab(tabId, { type: MessageType.OFFSCREEN_ERROR, videoId, code: "start_failed", message });
@@ -180,7 +208,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         await sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: { ...settings, enabled: Boolean(sessionMatches || shouldStart) } });
         await requestFeatures(tabId, settings);
         if (shouldStart) {
-          const result = await startForTab(tabId, videoId, message.pageContext);
+          const result = await runSessionOperation(async () => {
+            await loadSession();
+            if (activeSession && !currentSessionForTab(tabId, videoId)) return { ok: true, skipped: true };
+            const latestSettings = await readSettings();
+            if (!latestSettings.enabled) return { ok: true, skipped: true };
+            return startForTab(tabId, videoId, message.pageContext);
+          });
           if (!result.ok) {
             const reverted = await writeSettings({ enabled: false });
             await sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: reverted });
@@ -206,12 +240,20 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message.type === MessageType.SETTINGS_UPDATED) {
       const updated = await writeSettings(message.patch || message.settings || {});
-      await loadSession();
-      if (activeSession) {
-        const result = await sendToOffscreen({ type: MessageType.OFFSCREEN_SETTINGS, tabId: activeSession.tabId, settings: updated, pageContext: activeSession.pageContext });
-        if (!result?.ok) await sendToTab(activeSession.tabId, { type: MessageType.OFFSCREEN_ERROR, videoId: activeSession.videoId, code: result?.code || "settings_update_failed", message: result?.error || "言語モデルを変更できませんでした。" });
-        await sendToTab(activeSession.tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: updated });
-      }
+      await runSessionOperation(async () => {
+        await loadSession();
+        if (activeSession) {
+          if (settings.sourceLanguage !== updated.sourceLanguage && "detectedLanguage" in activeSession) {
+            const nextSession = { ...activeSession };
+            delete nextSession.detectedLanguage;
+            await saveSession(nextSession);
+            await broadcastExtensionPage({ type: MessageType.POPUP_LANGUAGE, tabId: activeSession.tabId, detectedLanguage: null });
+          }
+          const result = await sendToOffscreen({ type: MessageType.OFFSCREEN_SETTINGS, tabId: activeSession.tabId, settings: updated, pageContext: activeSession.pageContext });
+          if (!result?.ok) await sendToTab(activeSession.tabId, { type: MessageType.OFFSCREEN_ERROR, videoId: activeSession.videoId, code: result?.code || "settings_update_failed", message: result?.error || "言語モデルを変更できませんでした。" });
+          await sendToTab(activeSession.tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: updated });
+        }
+      });
       sendResponse({ ok: true, settings: updated });
       return;
     }
@@ -219,7 +261,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const updated = await writeSettings({ enabled: message.enabled === true });
       const tab = await getActiveTab();
       if (updated.enabled && tab?.id !== undefined) {
-        const result = await startForTab(tab.id);
+        const result = await runSessionOperation(() => startForTab(tab.id));
         if (!result.ok) {
           const reverted = await writeSettings({ enabled: false });
           await sendToTab(tab.id, { type: MessageType.OFFSCREEN_SETTINGS, settings: reverted });
@@ -228,9 +270,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({ ...result, settings: updated });
         }
       } else {
-        await loadSession();
-        const sessionTabId = activeSession?.tabId;
-        if (activeSession) await stopForTab(activeSession.tabId, activeSession.videoId);
+        let sessionTabId;
+        await runSessionOperation(async () => {
+          await loadSession();
+          sessionTabId = activeSession?.tabId;
+          if (activeSession) await stopForTab(activeSession.tabId, activeSession.videoId);
+        });
         const tabIds = new Set([sessionTabId, tab?.id].filter((tabId) => tabId !== undefined));
         await Promise.all([...tabIds].map((tabId) => sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: updated })));
         sendResponse({ ok: true, settings: updated });
@@ -256,7 +301,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
       const enabledSettings = await writeSettings({ enabled: true });
-      const result = await startForTab(tabId, message.videoId, message.pageContext);
+      const result = await runSessionOperation(() => startForTab(tabId, message.videoId, message.pageContext));
       if (!result.ok) {
         const reverted = await writeSettings({ enabled: false });
         await sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: reverted });
@@ -273,7 +318,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         return;
       }
       const updated = message.reason !== "navigation" ? await writeSettings({ enabled: false }) : null;
-      const result = await stopForTab(tabId, message.videoId);
+      const result = await runSessionOperation(() => stopForTab(tabId, message.videoId));
       if (updated) await sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: updated });
       sendResponse(result);
       return;
@@ -281,6 +326,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.type === MessageType.OFFSCREEN_STATE || message.type === MessageType.OFFSCREEN_TRANSCRIPT || message.type === MessageType.OFFSCREEN_TRANSLATION || message.type === MessageType.OFFSCREEN_ERROR) {
       await loadSession();
       if (activeSession && activeSession.tabId === message.tabId && activeSession.videoId === message.videoId) {
+        if ((message.type === MessageType.OFFSCREEN_TRANSCRIPT || message.type === MessageType.OFFSCREEN_TRANSLATION)
+          && typeof message.sourceLanguage === "string"
+          && activeSession.detectedLanguage !== message.sourceLanguage) {
+          await saveSession({ ...activeSession, detectedLanguage: message.sourceLanguage });
+          await broadcastExtensionPage({ type: MessageType.POPUP_LANGUAGE, tabId: activeSession.tabId, detectedLanguage: message.sourceLanguage });
+        }
         const forwarded = { ...message };
         delete forwarded.tabId;
         await sendToTab(activeSession.tabId, forwarded);
@@ -300,9 +351,16 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 });
 
 chrome.tabs.onRemoved.addListener((tabId) => {
-  void stopForTab(tabId);
+  void runSessionOperation(() => stopForTab(tabId));
 });
 
 chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.url) void stopForTab(tabId);
+  if (!changeInfo.url) return;
+  void runSessionOperation(async () => {
+    await loadSession();
+    const nextVideoId = getVideoId(changeInfo.url);
+    if (activeSession?.tabId === tabId && activeSession.videoId !== nextVideoId) {
+      await stopForTab(tabId, activeSession.videoId);
+    }
+  });
 });

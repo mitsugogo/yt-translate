@@ -4,6 +4,7 @@ export const MessageType = Object.freeze({
   SETTINGS_UPDATED: "settings:updated",
   SET_ENABLED: "settings:set-enabled",
   GET_POPUP_STATE: "popup:get-state",
+  POPUP_LANGUAGE: "popup:language",
   PREPARE_MODELS: "models:prepare",
   REQUEST_FEATURES: "features:request",
   REQUEST_PAGE_CONTEXT: "page-context:request",

@@ -15,7 +15,7 @@
   border: 1px solid rgba(128, 128, 128, .28);
   border-radius: 12px;
   background: rgba(128, 128, 128, .09);
-  color: light-dark(#181818, #f1f1f1);
+  color: var(--yt-spec-text-primary, #181818);
   font: 400 var(--yt-local-translator-font-size)/1.45 system-ui, sans-serif;
 }
 
@@ -38,3 +38,11 @@
 .dismiss { position: absolute; top: 8px; right: 10px; appearance: none; width: 28px; height: 28px; border: 0; border-radius: 50%; padding: 0; color: inherit; background: transparent; cursor: pointer; font: 400 20px/28px system-ui, sans-serif; opacity: .7; }
 .dismiss:hover { background: rgba(128, 128, 128, .18); opacity: 1; }
 .warning { margin-top: 10px; color: light-dark(#a22, #ff9b9b); font-size: 12px; }
+
+:host-context(html[dark]) .panel {
+  color: var(--yt-spec-text-primary, #f1f1f1);
+  background: rgba(255, 255, 255, .08);
+  border-color: rgba(255, 255, 255, .18);
+}
+
+:host-context(html[dark]) .warning { color: #ff9b9b; }

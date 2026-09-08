@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { TranslationQueue } from "../src/translation/translation-queue.js";
-import { formatLanguageDirection, normalizeSettings, resolveAutoLanguagePreference, shouldTranslateSource } from "../src/shared/settings.js";
+import { formatActiveTranslationStatus, formatLanguageDirection, normalizeSettings, resolveAutoLanguagePreference, shouldTranslateSource } from "../src/shared/settings.js";
 
 test("defaults auto recognition to the channel preference and supports manual override", () => {
   assert.equal(normalizeSettings({}).autoLanguagePreference, "channel");
@@ -16,6 +16,11 @@ test("supports Japanese speech translated to English", () => {
   assert.equal(settings.sourceLanguage, "ja-JP");
   assert.equal(settings.targetLanguage, "en");
   assert.equal(formatLanguageDirection(settings.sourceLanguage, settings.targetLanguage), "JA → EN");
+});
+
+test("formats the popup status with the detected and target languages", () => {
+  assert.equal(formatActiveTranslationStatus("en-US", "ja"), "翻訳中・英語→日本語");
+  assert.equal(formatActiveTranslationStatus(null, "id"), "翻訳中・判定中→インドネシア語");
 });
 
 test("does not request translation when the adopted speech language is the target", () => {

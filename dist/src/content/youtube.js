@@ -8,6 +8,7 @@ const MessageType = Object.freeze({
   SETTINGS_UPDATED: "settings:updated",
   SET_ENABLED: "settings:set-enabled",
   GET_POPUP_STATE: "popup:get-state",
+  POPUP_LANGUAGE: "popup:language",
   PREPARE_MODELS: "models:prepare",
   REQUEST_FEATURES: "features:request",
   REQUEST_PAGE_CONTEXT: "page-context:request",
@@ -137,6 +138,19 @@ function formatLanguageDirection(sourceLanguage, targetLanguage) {
   return `${getLanguageLabel(sourceLanguage)} → ${getLanguageLabel(targetLanguage)}`;
 }
 
+function getJapaneseLanguageLabel(language, fallback = "判定中") {
+  if (typeof language !== "string" || language === "auto") return fallback;
+  const modelLanguage = toModelLanguage(language);
+  if (modelLanguage === "ja") return "日本語";
+  if (modelLanguage === "en") return "英語";
+  if (modelLanguage === "id") return "インドネシア語";
+  return fallback;
+}
+
+function formatActiveTranslationStatus(detectedLanguage, targetLanguage) {
+  return `翻訳中・${getJapaneseLanguageLabel(detectedLanguage)}→${getJapaneseLanguageLabel(targetLanguage, "未設定")}`;
+}
+
 function shouldTranslateSource(sourceLanguage, targetLanguage) {
   return toModelLanguage(sourceLanguage) !== toModelLanguage(targetLanguage);
 }
@@ -163,7 +177,7 @@ function isYouTubeVideoUrl(url = "") {
   }
 }
 
-return { DEFAULT_SETTINGS, SOURCE_LANGUAGE_OPTIONS, TARGET_LANGUAGE_OPTIONS, AUTO_SPEECH_LANGUAGES, AUTO_LANGUAGE_PREFERENCE_OPTIONS, normalizeSettings, readSettings, writeSettings, toModelLanguage, getTargetLanguageForSource, getSpeechLanguagesForSource, resolveAutoLanguagePreference, getLanguageLabel, formatLanguageDirection, shouldTranslateSource, getVideoId, isYouTubeVideoUrl };
+return { DEFAULT_SETTINGS, SOURCE_LANGUAGE_OPTIONS, TARGET_LANGUAGE_OPTIONS, AUTO_SPEECH_LANGUAGES, AUTO_LANGUAGE_PREFERENCE_OPTIONS, normalizeSettings, readSettings, writeSettings, toModelLanguage, getTargetLanguageForSource, getSpeechLanguagesForSource, resolveAutoLanguagePreference, getLanguageLabel, formatLanguageDirection, getJapaneseLanguageLabel, formatActiveTranslationStatus, shouldTranslateSource, getVideoId, isYouTubeVideoUrl };
 })();
 modules[3] = (() => {
 const { getVideoId: getSharedVideoId } = modules[2];
@@ -402,7 +416,7 @@ const { formatLanguageDirection } = modules[2];
 const PANEL_STYLE = `
 :host { --yt-local-translator-font-size: 15px; all: initial; display: block; color-scheme: light dark; }
 *, *::before, *::after { box-sizing: border-box; }
-.panel { position:relative; margin:4px 0 12px; padding:12px 48px 12px 18px; min-height:82px; border:1px solid rgba(128,128,128,.28); border-radius:12px; background:rgba(128,128,128,.09); color:#181818; font:400 var(--yt-local-translator-font-size)/1.45 system-ui,sans-serif; }
+.panel { position:relative; margin:4px 0 12px; padding:12px 48px 12px 18px; min-height:82px; border:1px solid rgba(128,128,128,.28); border-radius:12px; background:rgba(128,128,128,.09); color:var(--yt-spec-text-primary,#181818); font:400 var(--yt-local-translator-font-size)/1.45 system-ui,sans-serif; }
 .footer { display:flex; align-items:center; gap:8px; }
 .brand { font-weight: 650; flex:1; }
 .direction { font: 600 11px/1 system-ui,sans-serif; opacity:.66; }
@@ -423,7 +437,8 @@ const PANEL_STYLE = `
 .dismiss { position:absolute; top:8px; right:10px; appearance:none; width:28px; height:28px; border:0; border-radius:50%; padding:0; color:inherit; background:transparent; cursor:pointer; font:400 20px/28px system-ui,sans-serif; opacity:.7; }
 .dismiss:hover { background:rgba(128,128,128,.18); opacity:1; }
 .warning { margin-top:10px; color:#a22; font-size:12px; }
-@media (prefers-color-scheme: dark) { .panel { color:#f1f1f1; background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.18); } .warning { color:#ff9b9b; } }
+:host-context(html[dark]) .panel { color:var(--yt-spec-text-primary,#f1f1f1); background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.18); }
+:host-context(html[dark]) .warning { color:#ff9b9b; }
 `;
 
 const STATUS_LABELS = {

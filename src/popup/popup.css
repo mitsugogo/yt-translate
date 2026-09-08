@@ -3,7 +3,6 @@
 body { width: 320px; margin: 0; background: light-dark(#fff, #1b1b1b); color: light-dark(#181818, #f1f1f1); }
 .popup { padding: 18px; }
 header { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.eyebrow { margin: 0 0 4px; color: #0b65c2; font: 700 10px/1 system-ui,sans-serif; letter-spacing: .12em; }
 h1 { margin: 0; font-size: 17px; line-height: 1.2; }
 .status { margin: 15px 0 12px; font-size: 12px; opacity: .75; }
 .model-progress { margin: -2px 0 12px; }
@@ -27,5 +26,4 @@ select { padding: 5px 6px; border: 1px solid rgba(128,128,128,.35); border-radiu
 .switch input:checked + .slider::before { transform: translateX(18px); }
 button { width: 100%; margin-top: 15px; padding: 8px 10px; border: 1px solid rgba(128,128,128,.35); border-radius: 8px; color: inherit; background: transparent; cursor: pointer; font: inherit; }
 button:hover { background: rgba(128,128,128,.12); }
-.privacy { margin: 14px 0 0; font-size: 11px; opacity: .63; }
 .error { margin: 12px 0 0; color: #c33; font-size: 12px; }

@@ -99,6 +99,19 @@ export function formatLanguageDirection(sourceLanguage, targetLanguage) {
   return `${getLanguageLabel(sourceLanguage)} → ${getLanguageLabel(targetLanguage)}`;
 }
 
+export function getJapaneseLanguageLabel(language, fallback = "判定中") {
+  if (typeof language !== "string" || language === "auto") return fallback;
+  const modelLanguage = toModelLanguage(language);
+  if (modelLanguage === "ja") return "日本語";
+  if (modelLanguage === "en") return "英語";
+  if (modelLanguage === "id") return "インドネシア語";
+  return fallback;
+}
+
+export function formatActiveTranslationStatus(detectedLanguage, targetLanguage) {
+  return `翻訳中・${getJapaneseLanguageLabel(detectedLanguage)}→${getJapaneseLanguageLabel(targetLanguage, "未設定")}`;
+}
+
 export function shouldTranslateSource(sourceLanguage, targetLanguage) {
   return toModelLanguage(sourceLanguage) !== toModelLanguage(targetLanguage);
 }

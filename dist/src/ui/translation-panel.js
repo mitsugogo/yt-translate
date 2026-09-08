@@ -4,7 +4,7 @@ import { formatLanguageDirection } from "../shared/settings.js";
 const PANEL_STYLE = `
 :host { --yt-local-translator-font-size: 15px; all: initial; display: block; color-scheme: light dark; }
 *, *::before, *::after { box-sizing: border-box; }
-.panel { position:relative; margin:4px 0 12px; padding:12px 48px 12px 18px; min-height:82px; border:1px solid rgba(128,128,128,.28); border-radius:12px; background:rgba(128,128,128,.09); color:#181818; font:400 var(--yt-local-translator-font-size)/1.45 system-ui,sans-serif; }
+.panel { position:relative; margin:4px 0 12px; padding:12px 48px 12px 18px; min-height:82px; border:1px solid rgba(128,128,128,.28); border-radius:12px; background:rgba(128,128,128,.09); color:var(--yt-spec-text-primary,#181818); font:400 var(--yt-local-translator-font-size)/1.45 system-ui,sans-serif; }
 .footer { display:flex; align-items:center; gap:8px; }
 .brand { font-weight: 650; flex:1; }
 .direction { font: 600 11px/1 system-ui,sans-serif; opacity:.66; }
@@ -25,7 +25,8 @@ const PANEL_STYLE = `
 .dismiss { position:absolute; top:8px; right:10px; appearance:none; width:28px; height:28px; border:0; border-radius:50%; padding:0; color:inherit; background:transparent; cursor:pointer; font:400 20px/28px system-ui,sans-serif; opacity:.7; }
 .dismiss:hover { background:rgba(128,128,128,.18); opacity:1; }
 .warning { margin-top:10px; color:#a22; font-size:12px; }
-@media (prefers-color-scheme: dark) { .panel { color:#f1f1f1; background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.18); } .warning { color:#ff9b9b; } }
+:host-context(html[dark]) .panel { color:var(--yt-spec-text-primary,#f1f1f1); background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.18); }
+:host-context(html[dark]) .warning { color:#ff9b9b; }
 `;
 
 const STATUS_LABELS = {
