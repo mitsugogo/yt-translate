@@ -1,6 +1,7 @@
 import { getSpeechLanguagesForSource, toModelLanguage } from "../shared/settings.js";
 import { LocalLanguageDetector, detectLanguageHeuristically } from "./language-detector.js";
 import { LocalTranslator } from "./translator.js";
+import { getExactHololiveTranslation } from "../speech/hololive-vocabulary.js";
 
 const JAPANESE_CHARACTER = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
 const LATIN_CHARACTER = /\p{Script=Latin}/u;
@@ -62,8 +63,10 @@ export class MixedLanguageTranslator {
     return detected.detectedLanguage;
   }
 
-  async translate(text, fallbackSourceLanguage, targetLanguage) {
+  async translate(text, fallbackSourceLanguage, targetLanguage, { useHololiveVocabulary = false } = {}) {
     const target = toModelLanguage(targetLanguage);
+    const exactTranslation = useHololiveVocabulary ? getExactHololiveTranslation(text, target) : null;
+    if (exactTranslation) return exactTranslation;
     const runs = splitLanguageRuns(text);
     const output = [];
     for (const run of runs) {

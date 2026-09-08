@@ -56,7 +56,7 @@ function mountPanel() {
     disposeContentScript();
     return;
   }
-  if (!currentVideoId || dismissedVideoId === currentVideoId || panel?.host?.isConnected) return;
+  if (!settings.enabled || !currentVideoId || dismissedVideoId === currentVideoId || panel?.host?.isConnected) return;
   const insertionPoint = findTranslationInsertionPoint();
   if (!insertionPoint) {
     if (mountTimer) clearTimeout(mountTimer);
@@ -67,18 +67,11 @@ function mountPanel() {
     return;
   }
   panel = new TranslationPanel({
-    onStart: async () => {
-      panel?.setState(TranslatorState.INITIALIZING);
-      const response = await send({ type: MessageType.START, videoId: currentVideoId, pageContext: readYoutubePageContext() });
-      if (response?.ok === false) panel?.setError(response.error || "音声認識・翻訳を開始できませんでした。");
-    },
-    onStop: async () => {
-      await send({ type: MessageType.STOP, videoId: currentVideoId });
-      panel?.setState(TranslatorState.IDLE);
-    },
     onDismiss: () => {
       dismissedVideoId = currentVideoId;
+      const videoId = currentVideoId;
       removePanel();
+      void send({ type: MessageType.STOP, videoId, reason: "dismiss" });
     }
   });
   if (!panel.mount(insertionPoint)) {
@@ -110,7 +103,14 @@ function handleRuntimeMessage(message, _sender, sendResponse) {
   }
   if (message.type === MessageType.OFFSCREEN_SETTINGS && message.settings) {
     settings = message.settings;
-    panel?.setSettings(settings);
+    if (settings.enabled) {
+      dismissedVideoId = null;
+      mountPanel();
+      panel?.setSettings(settings);
+    } else {
+      dismissedVideoId = null;
+      removePanel();
+    }
     return;
   }
   if (message.type === MessageType.OFFSCREEN_FEATURES) {

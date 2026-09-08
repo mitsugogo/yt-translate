@@ -3,6 +3,7 @@ import { TranslatorState } from "../shared/messages.js";
 import { detectLanguageHeuristically } from "../translation/language-detector.js";
 import { ensureSpeechLanguages } from "./speech-language.js";
 import { SpeechRecognizer } from "./speech-recognizer.js";
+import { getHololiveSpeechPhrases } from "./hololive-vocabulary.js";
 
 const FINAL_CANDIDATE_WAIT_MS = 700;
 
@@ -78,7 +79,11 @@ export class MultilingualSpeechRecognizer {
       onError: (error) => this.onError?.({ ...error, sourceLanguage: language })
     }));
     try {
-      await Promise.all(this.recognizers.map((recognizer, index) => recognizer.start(stream, { ...settings, sourceLanguage: languages[index] })));
+      await Promise.all(this.recognizers.map((recognizer, index) => recognizer.start(stream, {
+        ...settings,
+        sourceLanguage: languages[index],
+        phraseHints: settings.useHololiveVocabulary ? getHololiveSpeechPhrases(languages[index]) : []
+      })));
       this.onState?.(TranslatorState.LISTENING);
     } catch (error) {
       await this.stop();
@@ -110,7 +115,9 @@ export class MultilingualSpeechRecognizer {
   }
 
   async updateSettings(settings) {
-    const sourceChanged = settings.sourceLanguage !== this.settings.sourceLanguage || settings.preferredLanguage !== this.settings.preferredLanguage;
+    const sourceChanged = settings.sourceLanguage !== this.settings.sourceLanguage
+      || settings.preferredLanguage !== this.settings.preferredLanguage
+      || settings.useHololiveVocabulary !== this.settings.useHololiveVocabulary;
     this.settings = settings;
     if (!sourceChanged || !this.stream) return;
     const stream = this.stream;

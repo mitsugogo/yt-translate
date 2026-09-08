@@ -108,10 +108,13 @@ async function startForTab(tabId, requestedVideoId, providedPageContext = null) 
   if (!videoId) return { ok: false, error: "現在のタブでYouTube動画を確認できませんでした。" };
 
   await loadSession();
-  if (activeSession) await stopForTab(activeSession.tabId, activeSession.videoId);
+  const previousSession = activeSession;
+  if (previousSession) await stopForTab(previousSession.tabId, previousSession.videoId);
   const settings = await readSettings();
+  if (previousSession && previousSession.tabId !== tabId) {
+    await sendToTab(previousSession.tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: { ...settings, enabled: false } });
+  }
   const pageContext = await getPageContext(tabId, providedPageContext);
-  await sendToTab(tabId, { type: MessageType.OFFSCREEN_STATE, state: TranslatorState.INITIALIZING, videoId });
   let streamId;
   try {
     streamId = await chrome.tabCapture.getMediaStreamId({ targetTabId: tabId });
@@ -120,6 +123,9 @@ async function startForTab(tabId, requestedVideoId, providedPageContext = null) 
     await sendToTab(tabId, { type: MessageType.OFFSCREEN_ERROR, videoId, code: "capture_denied", message: `タブ音声を取得できませんでした。拡張機能を開いて有効化し直してください。（${message}）` });
     return { ok: false, error: message, code: "capture_denied" };
   }
+
+  await sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings });
+  await sendToTab(tabId, { type: MessageType.OFFSCREEN_STATE, state: TranslatorState.INITIALIZING, videoId });
 
   const nextSession = { tabId, videoId, pageContext };
   await saveSession(nextSession);
@@ -168,12 +174,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const tabId = sender.tab?.id;
       const videoId = message.videoId || getVideoId(sender.tab?.url || "");
       if (tabId !== undefined) {
-        await sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings });
-        await requestFeatures(tabId, settings);
         await loadSession();
-        if (settings.enabled && videoId && !activeSession) {
-          await startForTab(tabId, videoId, message.pageContext);
-        } else if (currentSessionForTab(tabId, videoId)) {
+        const sessionMatches = currentSessionForTab(tabId, videoId);
+        const shouldStart = settings.enabled && videoId && !activeSession;
+        await sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: { ...settings, enabled: Boolean(sessionMatches || shouldStart) } });
+        await requestFeatures(tabId, settings);
+        if (shouldStart) {
+          const result = await startForTab(tabId, videoId, message.pageContext);
+          if (!result.ok) {
+            const reverted = await writeSettings({ enabled: false });
+            await sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: reverted });
+          }
+        } else if (sessionMatches) {
           await sendToTab(tabId, { type: MessageType.OFFSCREEN_STATE, state: TranslatorState.LISTENING, videoId });
         }
       }
@@ -189,7 +201,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const tab = await getActiveTab();
       const activeTabSession = tab && currentSessionForTab(tab.id, getVideoId(tab.url || "")) ? activeSession : null;
       const features = tab && isYouTubeVideoUrl(tab.url || "") ? await requestFeatures(tab.id, settings) : null;
-      sendResponse({ ok: true, settings, session: activeTabSession, features: features?.features || null, tab: tab ? { id: tab.id, url: tab.url } : null });
+      sendResponse({ ok: true, settings: { ...settings, enabled: Boolean(activeTabSession) }, session: activeTabSession, features: features?.features || null, tab: tab ? { id: tab.id, url: tab.url } : null });
       return;
     }
     if (message.type === MessageType.SETTINGS_UPDATED) {
@@ -210,13 +222,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const result = await startForTab(tab.id);
         if (!result.ok) {
           const reverted = await writeSettings({ enabled: false });
+          await sendToTab(tab.id, { type: MessageType.OFFSCREEN_SETTINGS, settings: reverted });
           sendResponse({ ...result, settings: reverted });
         } else {
           sendResponse({ ...result, settings: updated });
         }
       } else {
         await loadSession();
+        const sessionTabId = activeSession?.tabId;
         if (activeSession) await stopForTab(activeSession.tabId, activeSession.videoId);
+        const tabIds = new Set([sessionTabId, tab?.id].filter((tabId) => tabId !== undefined));
+        await Promise.all([...tabIds].map((tabId) => sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: updated })));
         sendResponse({ ok: true, settings: updated });
       }
       return;
@@ -239,9 +255,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: false, error: "YouTubeのタブまたは拡張機能から開始してください。" });
         return;
       }
-      await writeSettings({ enabled: true });
+      const enabledSettings = await writeSettings({ enabled: true });
       const result = await startForTab(tabId, message.videoId, message.pageContext);
-      if (!result.ok) await writeSettings({ enabled: false });
+      if (!result.ok) {
+        const reverted = await writeSettings({ enabled: false });
+        await sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: reverted });
+      } else {
+        await sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: enabledSettings });
+      }
       sendResponse(result);
       return;
     }
@@ -251,8 +272,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         sendResponse({ ok: false, error: "YouTubeのタブが見つかりません。" });
         return;
       }
-      if (message.reason !== "navigation") await writeSettings({ enabled: false });
-      sendResponse(await stopForTab(tabId, message.videoId));
+      const updated = message.reason !== "navigation" ? await writeSettings({ enabled: false }) : null;
+      const result = await stopForTab(tabId, message.videoId);
+      if (updated) await sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: updated });
+      sendResponse(result);
       return;
     }
     if (message.type === MessageType.OFFSCREEN_STATE || message.type === MessageType.OFFSCREEN_TRANSCRIPT || message.type === MessageType.OFFSCREEN_TRANSLATION || message.type === MessageType.OFFSCREEN_ERROR) {

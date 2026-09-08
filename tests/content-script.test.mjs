@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { bundleContent } from "../scripts/bundle-content.mjs";
 import { findTranslationInsertionPoint } from "../src/content/youtube-dom.js";
 
-async function createContentHarness({ sendMessage } = {}) {
+async function createContentHarness({ sendMessage, enabled = true } = {}) {
   const source = await bundleContent(fileURLToPath(new URL("../src/content/youtube.js", import.meta.url)));
   const fields = new Map();
   const field = selector => {
@@ -64,9 +64,14 @@ async function createContentHarness({ sendMessage } = {}) {
     clearTimeout() {},
     chrome: { runtime }
   });
+  if (enabled) receive({
+    type: "session:offscreen-settings",
+    settings: { enabled: true, sourceLanguage: "auto", autoLanguagePreference: "channel", targetLanguage: "ja", showOriginal: true, showTranslation: true, fontSize: 15 }
+  });
   return {
     source, fields, markup, metadata, inserted, messages, runtime,
     receive: message => receive(message),
+    getInserted: () => inserted,
     invalidateFromDomChange() { runtime.id = undefined; observerCallback(); },
     status: () => ({ hostRemoved, observerDisconnected, intervalCleared })
   };
@@ -79,6 +84,9 @@ test("classic content bundle mounts the panel before metadata and accepts transl
   assert.equal(inserted.host.tag, "yt-local-translator");
   assert.match(markup, /リアルタイム翻訳/);
   assert.match(markup, /<style>/);
+  assert.doesNotMatch(markup, /data-action="toggle"/);
+  assert.doesNotMatch(markup, />開始</);
+  assert.match(markup, /音声を待っています/);
   assert.doesNotMatch(markup, /端末内で処理/);
   assert.ok(markup.indexOf('class="text"') < markup.indexOf('<span class="brand">リアルタイム翻訳</span>'));
   assert.doesNotMatch(source, /chrome\.runtime\.getURL/);
@@ -91,6 +99,21 @@ test("classic content bundle mounts the panel before metadata and accepts transl
   assert.equal(fields.get('[data-role="translation"]').textContent, "");
   receive({ type: "translation:result", videoId: "example", id: "en-1", original: "Hello", translated: "遅れて届いた翻訳" });
   assert.equal(fields.get('[data-role="translation"]').textContent, "");
+});
+
+test("panel stays hidden while disabled and follows popup settings", async () => {
+  const harness = await createContentHarness({ enabled: false });
+  assert.equal(harness.getInserted(), undefined);
+  harness.receive({
+    type: "session:offscreen-settings",
+    settings: { enabled: true, sourceLanguage: "auto", autoLanguagePreference: "channel", targetLanguage: "ja", showOriginal: true, showTranslation: true, fontSize: 15 }
+  });
+  assert.equal(harness.getInserted().host.tag, "yt-local-translator");
+  harness.receive({
+    type: "session:offscreen-settings",
+    settings: { enabled: false, sourceLanguage: "auto", autoLanguagePreference: "channel", targetLanguage: "ja", showOriginal: true, showTranslation: true, fontSize: 15 }
+  });
+  assert.equal(harness.status().hostRemoved, true);
 });
 
 test("invalidated extension context stops observers and removes the stale panel", async () => {
@@ -110,7 +133,7 @@ test("synchronous runtime invalidation during a panel action is contained", asyn
     return Promise.resolve({ ok: true });
   } });
   fail = true;
-  assert.doesNotThrow(() => harness.fields.get('[data-action="toggle"]').listeners.click());
+  assert.doesNotThrow(() => harness.fields.get('[data-action="dismiss"]').listeners.click());
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(harness.status(), {
     hostRemoved: true,

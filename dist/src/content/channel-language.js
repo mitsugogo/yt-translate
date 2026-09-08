@@ -15,6 +15,7 @@ const ENGLISH_BRANCH_PATTERNS = [/hololive[\s_-]*english/iu, /hololive[\s_-]*en\
 const INDONESIA_BRANCH_PATTERNS = [/hololive[\s_-]*indonesia/iu, /hololive[\s_-]*id\b/iu, /\bholo[\s_-]*id\b/iu, /#holoid\b/iu];
 const JAPAN_BRANCH_PATTERNS = [/ホロライブ(?!\s*(?:english|indonesia))/iu, /hololive[\s_-]*(?:jp|japan)\b/iu, /#holojp\b/iu];
 const JAPANESE_CHARACTERS = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
+const HOLOLIVE_CONTEXT_PATTERNS = [/hololive/iu, /ホロライブ/u, /\bholo(?:en|id|jp|x)\b/iu, /\bregloss\b/iu, /\bflow glow\b/iu];
 
 function containsAny(value, terms) {
   const normalized = value.toLocaleLowerCase("en-US");
@@ -59,6 +60,8 @@ export function readYoutubePageContext(doc = document) {
     doc.title || ""
   ].filter(Boolean).join(" ");
   return {
-    channelLanguageHint: detectChannelLanguageHint({ channelIdentity, videoIdentity })
+    channelLanguageHint: detectChannelLanguageHint({ channelIdentity, videoIdentity }),
+    isHololive: isKnownHololiveMember(channelIdentity) || matchesAny(`${channelIdentity}\n${videoIdentity}`, HOLOLIVE_CONTEXT_PATTERNS)
   };
 }
+import { isKnownHololiveMember } from "../speech/hololive-vocabulary.js";

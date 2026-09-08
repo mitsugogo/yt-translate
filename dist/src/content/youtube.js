@@ -193,6 +193,90 @@ function hasPanel(doc = document) {
 
 return { getVideoId, isVideoPage, findTranslationInsertionPoint, hasPanel };
 })();
+modules[5] = (() => {
+// Official display names are kept together so speech hints and exact glossary
+// translations use the same canonical spelling.
+const MEMBERS = [
+  ["ときのそら", "Tokino Sora"], ["ロボ子さん", "Robocosan"], ["アキ・ローゼンタール", "Aki Rosenthal"],
+  ["赤井はあと", "Akai Haato"], ["白上フブキ", "Shirakami Fubuki"], ["夏色まつり", "Natsuiro Matsuri"],
+  ["百鬼あやめ", "Nakiri Ayame"], ["癒月ちょこ", "Yuzuki Choco"], ["大空スバル", "Oozora Subaru"],
+  ["AZKi", "AZKi"], ["大神ミオ", "Ookami Mio"], ["さくらみこ", "Sakura Miko"],
+  ["猫又おかゆ", "Nekomata Okayu"], ["戌神ころね", "Inugami Korone"], ["星街すいせい", "Hoshimachi Suisei"],
+  ["兎田ぺこら", "Usada Pekora"], ["不知火フレア", "Shiranui Flare"], ["白銀ノエル", "Shirogane Noel"],
+  ["宝鐘マリン", "Houshou Marine"], ["角巻わため", "Tsunomaki Watame"], ["常闇トワ", "Tokoyami Towa"],
+  ["姫森ルーナ", "Himemori Luna"], ["雪花ラミィ", "Yukihana Lamy"], ["桃鈴ねね", "Momosuzu Nene"],
+  ["獅白ぼたん", "Shishiro Botan"], ["尾丸ポルカ", "Omaru Polka"], ["ラプラス・ダークネス", "La+ Darknesss"],
+  ["鷹嶺ルイ", "Takane Lui"], ["博衣こより", "Hakui Koyori"], ["風真いろは", "Kazama Iroha"],
+  ["沙花叉クロヱ", "Sakamata Chloe"], ["音乃瀬奏", "Otonose Kanade"], ["一条莉々華", "Ichijou Ririka"],
+  ["儒烏風亭らでん", "Juufuutei Raden"], ["轟はじめ", "Todoroki Hajime"], ["響咲リオナ", "Isaki Riona"],
+  ["虎金妃笑虎", "Koganei Niko"], ["水宮枢", "Mizumiya Su"], ["輪堂千速", "Rindo Chihaya"],
+  ["綺々羅々ヴィヴィ", "Kikirara Vivi"], ["井月みちる", "Izuki Michiru"], ["花園さやか", "Hanazono Sayaka"],
+  ["風白ゆき", "Kazeshiro Yuki"], ["アユンダ・リス", "Ayunda Risu"], ["ムーナ・ホシノヴァ", "Moona Hoshinova"],
+  ["アイラニ・イオフィフティーン", "Airani Iofifteen"], ["クレイジー・オリー", "Kureiji Ollie"],
+  ["アーニャ・メルフィッサ", "Anya Melfissa"], ["パヴォリア・レイネ", "Pavolia Reine"],
+  ["ベスティア・ゼータ", "Vestia Zeta"], ["カエラ・コヴァルスキア", "Kaela Kovalskia"],
+  ["こぼ・かなえる", "Kobo Kanaeru"], ["森カリオペ", "Mori Calliope"], ["小鳥遊キアラ", "Takanashi Kiara"],
+  ["一伊那尓栖", "Ninomae Ina'nis"], ["IRyS", "IRyS"], ["オーロ・クロニー", "Ouro Kronii"],
+  ["ハコス・ベールズ", "Hakos Baelz"], ["シオリ・ノヴェラ", "Shiori Novella"], ["古石ビジュー", "Koseki Bijou"],
+  ["ネリッサ・レイヴンクロフト", "Nerissa Ravencroft"], ["フワワ・アビスガード", "Fuwawa Abyssgard"],
+  ["モココ・アビスガード", "Mococo Abyssgard"], ["エリザベス・ローズ・ブラッドフレイム", "Elizabeth Rose Bloodflame"],
+  ["ジジ・ムリン", "Gigi Murin"], ["セシリア・イマーグリーン", "Cecilia Immergreen"],
+  ["ラオーラ・パンテーラ", "Raora Panthera"], ["ワトソン・アメリア", "Watson Amelia"],
+  ["がうる・ぐら", "Gawr Gura"], ["九十九佐命", "Tsukumo Sana"], ["セレス・ファウナ", "Ceres Fauna"],
+  ["七詩ムメイ", "Nanashi Mumei"], ["湊あくあ", "Minato Aqua"], ["紫咲シオン", "Murasaki Shion"],
+  ["天音かなた", "Amane Kanata"], ["桐生ココ", "Kiryu Coco"], ["火威青", "Hiodoshi Ao"]
+];
+
+const JAPANESE_TERMS = [
+  ["あえんびえん", 8], ["ホロライブ", 6], ["ホロメン", 6], ["ホロリス", 5],
+  ["ホロックス", 6], ["リグロス", 6], ["フロウグロウ", 6], ["みこち", 5],
+  ["すいちゃん", 4], ["ぺこら", 4], ["船長", 3], ["団長", 3], ["こんこよ", 5],
+  ["こんぺこ", 5], ["おつぺこ", 5], ["にぇ", 3], ["しゅば", 3], ["んなたん", 4], ["やごー", 4]
+];
+
+const LATIN_TERMS = [
+  ["hololive", 6], ["holoEN", 6], ["holoID", 6], ["holoX", 6], ["ReGLOSS", 6],
+  ["FLOW GLOW", 6], ["FUWAMOCO", 6], ["YAGOO", 5], ["aenbien", 8]
+];
+
+const EXACT_GLOSSARY = [
+  { terms: ["あえんびえん", "aenbien"], ja: "あえんびえん", en: "aenbien (pandemonium)", id: "aenbien (kekacauan)" },
+  ...MEMBERS.map(([ja, en]) => ({ terms: [ja, en], ja, en, id: en }))
+];
+
+function uniquePhrases(entries) {
+  const seen = new Set();
+  return entries.filter(({ phrase }) => {
+    const key = phrase.toLocaleLowerCase("en-US");
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function getHololiveSpeechPhrases(language) {
+  const modelLanguage = String(language).split("-")[0].toLowerCase();
+  const names = MEMBERS.map(([ja, en]) => ({ phrase: modelLanguage === "ja" ? ja : en, boost: 5 }));
+  const terms = (modelLanguage === "ja" ? JAPANESE_TERMS : LATIN_TERMS).map(([phrase, boost]) => ({ phrase, boost }));
+  return uniquePhrases([...names, ...terms]);
+}
+
+function isKnownHololiveMember(value) {
+  const normalized = String(value).toLocaleLowerCase("en-US");
+  return MEMBERS.some(([ja, en]) => normalized.includes(ja.toLocaleLowerCase("en-US")) || normalized.includes(en.toLocaleLowerCase("en-US")));
+}
+
+function getExactHololiveTranslation(text, targetLanguage) {
+  const normalized = String(text).trim().replace(/[。．.!！?？]+$/u, "").trim().toLocaleLowerCase("en-US");
+  if (!normalized) return null;
+  const entry = EXACT_GLOSSARY.find(({ terms }) => terms.some((term) => term.toLocaleLowerCase("en-US") === normalized));
+  if (!entry) return null;
+  const target = String(targetLanguage).split("-")[0].toLowerCase();
+  return entry[target] || entry.en;
+}
+
+return { getHololiveSpeechPhrases, isKnownHololiveMember, getExactHololiveTranslation };
+})();
 modules[4] = (() => {
 const ENGLISH_BRANCH_MEMBERS = [
   "mori calliope", "takanashi kiara", "ninomae ina'nis", "ninomae ina’nis", "irys",
@@ -211,6 +295,7 @@ const ENGLISH_BRANCH_PATTERNS = [/hololive[\s_-]*english/iu, /hololive[\s_-]*en\
 const INDONESIA_BRANCH_PATTERNS = [/hololive[\s_-]*indonesia/iu, /hololive[\s_-]*id\b/iu, /\bholo[\s_-]*id\b/iu, /#holoid\b/iu];
 const JAPAN_BRANCH_PATTERNS = [/ホロライブ(?!\s*(?:english|indonesia))/iu, /hololive[\s_-]*(?:jp|japan)\b/iu, /#holojp\b/iu];
 const JAPANESE_CHARACTERS = /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u;
+const HOLOLIVE_CONTEXT_PATTERNS = [/hololive/iu, /ホロライブ/u, /\bholo(?:en|id|jp|x)\b/iu, /\bregloss\b/iu, /\bflow glow\b/iu];
 
 function containsAny(value, terms) {
   const normalized = value.toLocaleLowerCase("en-US");
@@ -255,13 +340,14 @@ function readYoutubePageContext(doc = document) {
     doc.title || ""
   ].filter(Boolean).join(" ");
   return {
-    channelLanguageHint: detectChannelLanguageHint({ channelIdentity, videoIdentity })
+    channelLanguageHint: detectChannelLanguageHint({ channelIdentity, videoIdentity }),
+    isHololive: isKnownHololiveMember(channelIdentity) || matchesAny(`${channelIdentity}\n${videoIdentity}`, HOLOLIVE_CONTEXT_PATTERNS)
   };
 }
-
+const { isKnownHololiveMember } = modules[5];
 return { detectChannelLanguageHint, readYoutubePageContext };
 })();
-modules[5] = (() => {
+modules[6] = (() => {
 class YoutubeNavigation {
   constructor(onNavigate) {
     this.onNavigate = onNavigate;
@@ -310,13 +396,13 @@ class YoutubeNavigation {
 
 return { YoutubeNavigation };
 })();
-modules[6] = (() => {
+modules[7] = (() => {
 const { MessageType, TranslatorState } = modules[1];
 const { formatLanguageDirection } = modules[2];
 const PANEL_STYLE = `
 :host { --yt-local-translator-font-size: 15px; all: initial; display: block; color-scheme: light dark; }
 *, *::before, *::after { box-sizing: border-box; }
-.panel { margin: 4px 0 12px; padding: 12px 18px; min-height: 82px; border: 1px solid rgba(128,128,128,.28); border-radius: 12px; background: rgba(128,128,128,.09); color: #181818; font: 400 var(--yt-local-translator-font-size)/1.45 system-ui, sans-serif; }
+.panel { position:relative; margin:4px 0 12px; padding:12px 48px 12px 18px; min-height:82px; border:1px solid rgba(128,128,128,.28); border-radius:12px; background:rgba(128,128,128,.09); color:#181818; font:400 var(--yt-local-translator-font-size)/1.45 system-ui,sans-serif; }
 .footer { display:flex; align-items:center; gap:8px; }
 .brand { font-weight: 650; flex:1; }
 .direction { font: 600 11px/1 system-ui,sans-serif; opacity:.66; }
@@ -334,9 +420,8 @@ const PANEL_STYLE = `
 .progress-bar.indeterminate { width:38%; animation:progress-slide 1.1s ease-in-out infinite alternate; }
 @keyframes progress-slide { from { transform:translateX(-105%); } to { transform:translateX(260%); } }
 .footer { margin-top:10px; }
-button { appearance:none; border:1px solid rgba(128,128,128,.34); border-radius:999px; padding:5px 11px; color:inherit; background:transparent; cursor:pointer; font:inherit; font-size:12px; }
-button.primary { border-color:#0b65c2; background:#0b65c2; color:#fff; }
-button:disabled { opacity:.45; cursor:not-allowed; }
+.dismiss { position:absolute; top:8px; right:10px; appearance:none; width:28px; height:28px; border:0; border-radius:50%; padding:0; color:inherit; background:transparent; cursor:pointer; font:400 20px/28px system-ui,sans-serif; opacity:.7; }
+.dismiss:hover { background:rgba(128,128,128,.18); opacity:1; }
 .warning { margin-top:10px; color:#a22; font-size:12px; }
 @media (prefers-color-scheme: dark) { .panel { color:#f1f1f1; background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.18); } .warning { color:#ff9b9b; } }
 `;
@@ -351,14 +436,11 @@ const STATUS_LABELS = {
 };
 
 class TranslationPanel {
-  constructor({ onStart, onStop, onDismiss } = {}) {
-    this.onStart = onStart;
-    this.onStop = onStop;
+  constructor({ onDismiss } = {}) {
     this.onDismiss = onDismiss;
     this.host = null;
     this.root = null;
     this.state = TranslatorState.IDLE;
-    this.active = false;
     this.features = null;
     this.settings = null;
     this.currentTranscriptId = null;
@@ -373,10 +455,11 @@ class TranslationPanel {
     this.root.innerHTML = `
       <style>${PANEL_STYLE}</style>
       <section class="panel" aria-label="リアルタイム翻訳">
+        <button type="button" class="dismiss" data-action="dismiss" aria-label="翻訳パネルを閉じる">×</button>
         <div class="text">
           <div class="line original" data-role="original"></div>
           <div class="line translation" data-role="translation"></div>
-          <div class="empty" data-role="empty">「開始」を押すと音声を取得します。</div>
+          <div class="empty" data-role="empty">音声を待っています…</div>
         </div>
         <div class="warning" data-role="warning" hidden></div>
         <div class="detail" data-role="detail" hidden></div>
@@ -389,8 +472,6 @@ class TranslationPanel {
           <span class="dot" data-role="dot" aria-hidden="true"></span>
           <span class="state" data-role="state">準備完了</span>
           <span class="direction" data-role="direction">EN → JA</span>
-          <button type="button" data-action="dismiss" aria-label="翻訳パネルを閉じる">×</button>
-          <button type="button" class="primary" data-action="toggle">開始</button>
         </div>
       </section>
     `;
@@ -400,10 +481,6 @@ class TranslationPanel {
   }
 
   bindEvents() {
-    this.root.querySelector('[data-action="toggle"]').addEventListener("click", () => {
-      if (this.active) this.onStop?.();
-      else this.onStart?.();
-    });
     this.root.querySelector('[data-action="dismiss"]').addEventListener("click", () => this.onDismiss?.());
   }
 
@@ -432,15 +509,11 @@ class TranslationPanel {
 
   setState(state, detail = "", progress = null) {
     this.state = state;
-    this.active = [TranslatorState.INITIALIZING, TranslatorState.DOWNLOADING, TranslatorState.LISTENING, TranslatorState.PAUSED].includes(state);
     if (!this.root) return;
     const dot = this.root.querySelector('[data-role="dot"]');
     dot.classList.toggle("listening", state === TranslatorState.LISTENING);
     dot.classList.toggle("error", state === TranslatorState.ERROR);
     this.root.querySelector('[data-role="state"]').textContent = STATUS_LABELS[state] || state;
-    const toggle = this.root.querySelector('[data-action="toggle"]');
-    toggle.textContent = this.active ? "停止" : "開始";
-    toggle.classList.toggle("primary", !this.active);
     this.setDetail(detail);
     this.setProgress(state === TranslatorState.DOWNLOADING, progress, detail);
   }
@@ -529,8 +602,8 @@ const { MessageType, TranslatorState } = modules[1];
 const { DEFAULT_SETTINGS } = modules[2];
 const { getVideoId, findTranslationInsertionPoint } = modules[3];
 const { readYoutubePageContext } = modules[4];
-const { YoutubeNavigation } = modules[5];
-const { TranslationPanel } = modules[6];
+const { YoutubeNavigation } = modules[6];
+const { TranslationPanel } = modules[7];
 let currentVideoId = null;
 let panel = null;
 let settings = DEFAULT_SETTINGS;
@@ -582,7 +655,7 @@ function mountPanel() {
     disposeContentScript();
     return;
   }
-  if (!currentVideoId || dismissedVideoId === currentVideoId || panel?.host?.isConnected) return;
+  if (!settings.enabled || !currentVideoId || dismissedVideoId === currentVideoId || panel?.host?.isConnected) return;
   const insertionPoint = findTranslationInsertionPoint();
   if (!insertionPoint) {
     if (mountTimer) clearTimeout(mountTimer);
@@ -593,18 +666,11 @@ function mountPanel() {
     return;
   }
   panel = new TranslationPanel({
-    onStart: async () => {
-      panel?.setState(TranslatorState.INITIALIZING);
-      const response = await send({ type: MessageType.START, videoId: currentVideoId, pageContext: readYoutubePageContext() });
-      if (response?.ok === false) panel?.setError(response.error || "音声認識・翻訳を開始できませんでした。");
-    },
-    onStop: async () => {
-      await send({ type: MessageType.STOP, videoId: currentVideoId });
-      panel?.setState(TranslatorState.IDLE);
-    },
     onDismiss: () => {
       dismissedVideoId = currentVideoId;
+      const videoId = currentVideoId;
       removePanel();
+      void send({ type: MessageType.STOP, videoId, reason: "dismiss" });
     }
   });
   if (!panel.mount(insertionPoint)) {
@@ -636,7 +702,14 @@ function handleRuntimeMessage(message, _sender, sendResponse) {
   }
   if (message.type === MessageType.OFFSCREEN_SETTINGS && message.settings) {
     settings = message.settings;
-    panel?.setSettings(settings);
+    if (settings.enabled) {
+      dismissedVideoId = null;
+      mountPanel();
+      panel?.setSettings(settings);
+    } else {
+      dismissedVideoId = null;
+      removePanel();
+    }
     return;
   }
   if (message.type === MessageType.OFFSCREEN_FEATURES) {

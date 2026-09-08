@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { ensureSpeechLanguage } from "../src/speech/speech-language.js";
+import { applySpeechPhraseHints } from "../src/speech/speech-recognizer.js";
 import { MessageType } from "../src/shared/messages.js";
 
 test("prepares local speech with the same default quality used by recognition", async () => {
@@ -33,6 +34,17 @@ test("unavailable local speech is not treated as a completed download", async ()
     static async install() { assert.fail("Must not install unsupported speech"); }
   }
   await assert.rejects(ensureSpeechLanguage({ scope: { SpeechRecognition } }), { code: "language_unavailable" });
+});
+
+test("applies contextual phrase hints only when the browser supports them", () => {
+  class SpeechRecognitionPhrase {
+    constructor(phrase, boost) { this.phrase = phrase; this.boost = boost; }
+  }
+  const recognition = { phrases: [] };
+  assert.equal(applySpeechPhraseHints(recognition, [{ phrase: "あえんびえん", boost: 20 }], { SpeechRecognitionPhrase }), true);
+  assert.equal(recognition.phrases[0].phrase, "あえんびえん");
+  assert.equal(recognition.phrases[0].boost, 10);
+  assert.equal(applySpeechPhraseHints({}, [{ phrase: "あえんびえん", boost: 8 }], { SpeechRecognitionPhrase }), false);
 });
 
 test("popup clears starting and progress after failure, including late progress", async (t) => {

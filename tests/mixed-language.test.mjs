@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { selectSpeechCandidate } from "../src/speech/multilingual-speech-recognizer.js";
 import { MixedLanguageTranslator, splitLanguageRuns } from "../src/translation/mixed-language-translator.js";
 import { LocalTranslator } from "../src/translation/translator.js";
+import { getExactHololiveTranslation, getHololiveSpeechPhrases } from "../src/speech/hololive-vocabulary.js";
 
 test("splits Japanese and Latin language runs without losing separators", () => {
   assert.deepEqual(splitLanguageRuns("今日は streaming dan musik!"), [
@@ -30,6 +31,24 @@ test("translates each mixed-language run into the selected target", async () => 
   const translated = await mixed.translate("今日は streaming dan musik!", "ja-JP", "ja");
   assert.equal(translated, "今日は [ja:streaming dan musik!]");
   assert.deepEqual(calls, [{ text: "streaming dan musik!", source: "id", target: "ja" }]);
+});
+
+test("provides Hololive names and glossary phrases to local recognition", () => {
+  const japanese = getHololiveSpeechPhrases("ja-JP");
+  const english = getHololiveSpeechPhrases("en-US");
+  assert.ok(japanese.some(({ phrase, boost }) => phrase === "あえんびえん" && boost >= 8));
+  assert.ok(japanese.some(({ phrase }) => phrase === "さくらみこ"));
+  assert.ok(english.some(({ phrase }) => phrase === "Sakura Miko"));
+});
+
+test("uses exact Hololive glossary translations without calling the generic model", async () => {
+  assert.equal(getExactHololiveTranslation("あえんびえん！", "en"), "aenbien (pandemonium)");
+  assert.equal(getExactHololiveTranslation("宝鐘マリン", "en"), "Houshou Marine");
+  const mixed = new MixedLanguageTranslator({
+    translator: { async translate() { assert.fail("Exact glossary entry must bypass the generic translator"); }, reset() {} },
+    detector: { reset() {} }
+  });
+  assert.equal(await mixed.translate("あえんびえん！", "ja-JP", "en", { useHololiveVocabulary: true }), "aenbien (pandemonium)");
 });
 
 test("candidate selection uses recognition confidence and language detection", async () => {

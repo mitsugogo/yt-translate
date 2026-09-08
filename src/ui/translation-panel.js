@@ -4,7 +4,7 @@ import { formatLanguageDirection } from "../shared/settings.js";
 const PANEL_STYLE = `
 :host { --yt-local-translator-font-size: 15px; all: initial; display: block; color-scheme: light dark; }
 *, *::before, *::after { box-sizing: border-box; }
-.panel { margin: 4px 0 12px; padding: 12px 18px; min-height: 82px; border: 1px solid rgba(128,128,128,.28); border-radius: 12px; background: rgba(128,128,128,.09); color: #181818; font: 400 var(--yt-local-translator-font-size)/1.45 system-ui, sans-serif; }
+.panel { position:relative; margin:4px 0 12px; padding:12px 48px 12px 18px; min-height:82px; border:1px solid rgba(128,128,128,.28); border-radius:12px; background:rgba(128,128,128,.09); color:#181818; font:400 var(--yt-local-translator-font-size)/1.45 system-ui,sans-serif; }
 .footer { display:flex; align-items:center; gap:8px; }
 .brand { font-weight: 650; flex:1; }
 .direction { font: 600 11px/1 system-ui,sans-serif; opacity:.66; }
@@ -22,9 +22,8 @@ const PANEL_STYLE = `
 .progress-bar.indeterminate { width:38%; animation:progress-slide 1.1s ease-in-out infinite alternate; }
 @keyframes progress-slide { from { transform:translateX(-105%); } to { transform:translateX(260%); } }
 .footer { margin-top:10px; }
-button { appearance:none; border:1px solid rgba(128,128,128,.34); border-radius:999px; padding:5px 11px; color:inherit; background:transparent; cursor:pointer; font:inherit; font-size:12px; }
-button.primary { border-color:#0b65c2; background:#0b65c2; color:#fff; }
-button:disabled { opacity:.45; cursor:not-allowed; }
+.dismiss { position:absolute; top:8px; right:10px; appearance:none; width:28px; height:28px; border:0; border-radius:50%; padding:0; color:inherit; background:transparent; cursor:pointer; font:400 20px/28px system-ui,sans-serif; opacity:.7; }
+.dismiss:hover { background:rgba(128,128,128,.18); opacity:1; }
 .warning { margin-top:10px; color:#a22; font-size:12px; }
 @media (prefers-color-scheme: dark) { .panel { color:#f1f1f1; background:rgba(255,255,255,.08); border-color:rgba(255,255,255,.18); } .warning { color:#ff9b9b; } }
 `;
@@ -39,14 +38,11 @@ const STATUS_LABELS = {
 };
 
 export class TranslationPanel {
-  constructor({ onStart, onStop, onDismiss } = {}) {
-    this.onStart = onStart;
-    this.onStop = onStop;
+  constructor({ onDismiss } = {}) {
     this.onDismiss = onDismiss;
     this.host = null;
     this.root = null;
     this.state = TranslatorState.IDLE;
-    this.active = false;
     this.features = null;
     this.settings = null;
     this.currentTranscriptId = null;
@@ -61,10 +57,11 @@ export class TranslationPanel {
     this.root.innerHTML = `
       <style>${PANEL_STYLE}</style>
       <section class="panel" aria-label="リアルタイム翻訳">
+        <button type="button" class="dismiss" data-action="dismiss" aria-label="翻訳パネルを閉じる">×</button>
         <div class="text">
           <div class="line original" data-role="original"></div>
           <div class="line translation" data-role="translation"></div>
-          <div class="empty" data-role="empty">「開始」を押すと音声を取得します。</div>
+          <div class="empty" data-role="empty">音声を待っています…</div>
         </div>
         <div class="warning" data-role="warning" hidden></div>
         <div class="detail" data-role="detail" hidden></div>
@@ -77,8 +74,6 @@ export class TranslationPanel {
           <span class="dot" data-role="dot" aria-hidden="true"></span>
           <span class="state" data-role="state">準備完了</span>
           <span class="direction" data-role="direction">EN → JA</span>
-          <button type="button" data-action="dismiss" aria-label="翻訳パネルを閉じる">×</button>
-          <button type="button" class="primary" data-action="toggle">開始</button>
         </div>
       </section>
     `;
@@ -88,10 +83,6 @@ export class TranslationPanel {
   }
 
   bindEvents() {
-    this.root.querySelector('[data-action="toggle"]').addEventListener("click", () => {
-      if (this.active) this.onStop?.();
-      else this.onStart?.();
-    });
     this.root.querySelector('[data-action="dismiss"]').addEventListener("click", () => this.onDismiss?.());
   }
 
@@ -120,15 +111,11 @@ export class TranslationPanel {
 
   setState(state, detail = "", progress = null) {
     this.state = state;
-    this.active = [TranslatorState.INITIALIZING, TranslatorState.DOWNLOADING, TranslatorState.LISTENING, TranslatorState.PAUSED].includes(state);
     if (!this.root) return;
     const dot = this.root.querySelector('[data-role="dot"]');
     dot.classList.toggle("listening", state === TranslatorState.LISTENING);
     dot.classList.toggle("error", state === TranslatorState.ERROR);
     this.root.querySelector('[data-role="state"]').textContent = STATUS_LABELS[state] || state;
-    const toggle = this.root.querySelector('[data-action="toggle"]');
-    toggle.textContent = this.active ? "停止" : "開始";
-    toggle.classList.toggle("primary", !this.active);
     this.setDetail(detail);
     this.setProgress(state === TranslatorState.DOWNLOADING, progress, detail);
   }

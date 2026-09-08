@@ -3,6 +3,17 @@ import { speechError, TranslatorState } from "./speech-state.js";
 
 const RESTART_DELAYS = [500, 1000, 2000, 5000];
 
+export function applySpeechPhraseHints(recognition, phraseHints = [], scope = globalThis) {
+  const Phrase = scope.SpeechRecognitionPhrase;
+  if (!("phrases" in recognition) || typeof Phrase !== "function" || phraseHints.length === 0) return false;
+  try {
+    recognition.phrases = phraseHints.map(({ phrase, boost }) => new Phrase(phrase, Math.min(10, Math.max(0, Number(boost) || 0))));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export class SpeechRecognizer {
   constructor({ onInterim, onFinal, onState, onError, manageAudioOutput = true, stopStream = true } = {}) {
     this.onInterim = onInterim;
@@ -73,6 +84,7 @@ export class SpeechRecognizer {
       throw Object.assign(new Error(error.message), error);
     }
     recognition.processLocally = true;
+    applySpeechPhraseHints(recognition, this.settings.phraseHints);
 
     recognition.onresult = (event) => {
       const interim = [];
