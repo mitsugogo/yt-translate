@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "YouTube Local Translator",
+  "version": "0.3.0",
+  "description": "YouTubeの日本語・英語・インドネシア語音声を端末内で文字起こし・翻訳します。",
+  "minimum_chrome_version": "138",
+  "permissions": [
+    "activeTab",
+    "offscreen",
+    "storage",
+    "tabCapture"
+  ],
+  "action": {
+    "default_title": "YouTube Local Translator",
+    "default_popup": "src/popup/popup.html"
+  },
+  "background": {
+    "service_worker": "src/background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.youtube.com/*",
+        "https://youtube.com/*"
+      ],
+      "js": ["src/content/youtube.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
