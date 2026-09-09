@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { selectSpeechCandidate } from "../src/speech/multilingual-speech-recognizer.js";
+import { MultilingualSpeechRecognizer, selectSpeechCandidate, SessionLanguageLearner } from "../src/speech/multilingual-speech-recognizer.js";
 import { MixedLanguageTranslator, splitLanguageRuns } from "../src/translation/mixed-language-translator.js";
 import { LocalTranslator } from "../src/translation/translator.js";
 import { getExactHololiveTranslation, getHololiveSpeechPhrases } from "../src/speech/hololive-vocabulary.js";
@@ -94,6 +94,43 @@ test("ordered language priorities resolve otherwise equal candidates", async () 
   assert.equal((await selectSpeechCandidate(candidates, null, ["en", "ja"])).sourceLanguage, "en-US");
   assert.equal((await selectSpeechCandidate([candidates[0], candidates[2]], null, ["en", "ja"])).sourceLanguage, "ja-JP");
   assert.equal((await selectSpeechCandidate(candidates, null, ["ja"])).sourceLanguage, "ja-JP");
+});
+
+test("learns the dominant language from final speech within one session", async () => {
+  const learner = new SessionLanguageLearner();
+  for (let index = 0; index < 6; index += 1) {
+    learner.observe({ text: "terima kasih semuanya", sourceLanguage: "id-ID", confidence: 0.85 });
+  }
+  const closeCandidates = [
+    { text: "…", sourceLanguage: "en-US", confidence: 0.61 },
+    { text: "…", sourceLanguage: "id-ID", confidence: 0.5 }
+  ];
+  assert.equal((await selectSpeechCandidate(closeCandidates)).sourceLanguage, "en-US");
+  assert.equal((await selectSpeechCandidate(closeCandidates, null, [], learner)).sourceLanguage, "id-ID");
+});
+
+test("session learning ignores short noise, adapts to recent speech, and can be reset", () => {
+  const learner = new SessionLanguageLearner();
+  for (let index = 0; index < 8; index += 1) learner.observe({ text: "bahasa indonesia", sourceLanguage: "id-ID", confidence: 0.8 });
+  const initialIdBias = learner.getBias({ text: "…", sourceLanguage: "id-ID" });
+  learner.observe({ text: "ah", sourceLanguage: "en-US", confidence: 1 });
+  assert.equal(learner.getBias({ text: "…", sourceLanguage: "id-ID" }), initialIdBias);
+
+  for (let index = 0; index < 18; index += 1) learner.observe({ text: "we are speaking English now", sourceLanguage: "en-US", confidence: 0.9 });
+  assert.ok(learner.getBias({ text: "…", sourceLanguage: "en-US" }) > learner.getBias({ text: "…", sourceLanguage: "id-ID" }));
+  learner.reset();
+  assert.equal(learner.getBias({ text: "…", sourceLanguage: "en-US" }), 0);
+  assert.equal(learner.getBias({ text: "…", sourceLanguage: "id-ID" }), 0);
+});
+
+test("stopping a recognizer discards its session language learning", async () => {
+  const recognizer = new MultilingualSpeechRecognizer();
+  for (let index = 0; index < 6; index += 1) {
+    recognizer.sessionLanguageLearner.observe({ text: "bahasa indonesia", sourceLanguage: "id-ID", confidence: 0.8 });
+  }
+  assert.ok(recognizer.sessionLanguageLearner.getBias({ text: "…", sourceLanguage: "id-ID" }) > 0);
+  await recognizer.stop();
+  assert.equal(recognizer.sessionLanguageLearner.getBias({ text: "…", sourceLanguage: "id-ID" }), 0);
 });
 
 test("translator caches separate model instances for each language pair", async (t) => {
