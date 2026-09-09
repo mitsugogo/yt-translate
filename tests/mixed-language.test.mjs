@@ -83,6 +83,17 @@ test("preferred language remains a small bias for clear longer speech", async ()
   assert.equal(selected.sourceLanguage, "en-US");
 });
 
+test("ordered language priorities resolve otherwise equal candidates", async () => {
+  const candidates = [
+    { text: "…", sourceLanguage: "ja-JP", confidence: 0.5 },
+    { text: "…", sourceLanguage: "en-US", confidence: 0.5 },
+    { text: "…", sourceLanguage: "id-ID", confidence: 0.5 }
+  ];
+  assert.equal((await selectSpeechCandidate(candidates, null, ["id", "en", "ja"])).sourceLanguage, "id-ID");
+  assert.equal((await selectSpeechCandidate(candidates, null, ["en", "ja"])).sourceLanguage, "en-US");
+  assert.equal((await selectSpeechCandidate(candidates, null, ["ja"])).sourceLanguage, "ja-JP");
+});
+
 test("translator caches separate model instances for each language pair", async (t) => {
   const previous = globalThis.Translator;
   t.after(() => { globalThis.Translator = previous; });

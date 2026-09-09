@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { TranslationQueue } from "../src/translation/translation-queue.js";
-import { formatActiveTranslationStatus, formatLanguageDirection, normalizeSettings, resolveAutoLanguagePreference, shouldTranslateSource } from "../src/shared/settings.js";
+import { formatActiveTranslationStatus, formatLanguageDirection, normalizeSettings, resolveAutoLanguagePreference, resolveAutoLanguagePriority, shouldTranslateSource } from "../src/shared/settings.js";
 
 test("defaults auto recognition to the channel preference and supports manual override", () => {
   assert.equal(normalizeSettings({}).autoLanguagePreference, "channel");
@@ -9,6 +9,8 @@ test("defaults auto recognition to the channel preference and supports manual ov
   assert.equal(resolveAutoLanguagePreference("channel", "en"), "en");
   assert.equal(resolveAutoLanguagePreference("ja", "en"), "ja");
   assert.equal(resolveAutoLanguagePreference("none", "en"), null);
+  assert.deepEqual(resolveAutoLanguagePriority("channel", ["id", "en", "ja"]), ["id", "en", "ja"]);
+  assert.deepEqual(resolveAutoLanguagePriority("en", ["id", "en", "ja"]), ["en"]);
 });
 
 test("supports Japanese speech translated to English", () => {

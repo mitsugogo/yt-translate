@@ -102,6 +102,16 @@ test("classic content bundle mounts the panel before metadata and accepts transl
   assert.equal(fields.get('[data-role="translation"]').textContent, "");
   receive({ type: "translation:result", videoId: "example", id: "en-1", original: "Hello", translated: "遅れて届いた翻訳" });
   assert.equal(fields.get('[data-role="translation"]').textContent, "");
+  receive({ type: "session:state", videoId: "example", state: "downloading", detail: "言語判定モデル 100%", progress: 1 });
+  assert.equal(fields.get('[data-role="progress"]').hidden, true);
+  assert.equal(fields.get('[data-role="detail"]').hidden, true);
+  receive({ type: "session:state", videoId: "example", state: "listening" });
+  receive({ type: "session:state", videoId: "example", state: "downloading", detail: "遅れて届いた進捗", progress: 0.5 });
+  assert.equal(fields.get('[data-role="state"]').textContent, "翻訳中");
+  assert.equal(fields.get('[data-role="progress"]').hidden, true);
+  receive({ type: "pipeline:error", videoId: "example", message: "音声認識を開始できませんでした。" });
+  assert.equal(fields.get('[data-role="warning"]').textContent, "音声認識を開始できませんでした。");
+  assert.equal(fields.get('[data-role="detail"]').hidden, true);
 });
 
 test("panel stays hidden while disabled and follows popup settings", async () => {

@@ -240,7 +240,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     if (message.type === MessageType.SETTINGS_UPDATED) {
       const updated = await writeSettings(message.patch || message.settings || {});
-      await runSessionOperation(async () => {
+      const updateResult = await runSessionOperation(async () => {
         await loadSession();
         if (activeSession) {
           if (settings.sourceLanguage !== updated.sourceLanguage && "detectedLanguage" in activeSession) {
@@ -252,8 +252,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           const result = await sendToOffscreen({ type: MessageType.OFFSCREEN_SETTINGS, tabId: activeSession.tabId, settings: updated, pageContext: activeSession.pageContext });
           if (!result?.ok) await sendToTab(activeSession.tabId, { type: MessageType.OFFSCREEN_ERROR, videoId: activeSession.videoId, code: result?.code || "settings_update_failed", message: result?.error || "言語モデルを変更できませんでした。" });
           await sendToTab(activeSession.tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: updated });
+          return result || { ok: false, error: "言語モデルを変更できませんでした。" };
         }
+        return { ok: true };
       });
+      if (!updateResult.ok) {
+        sendResponse({ ...updateResult, settings: updated });
+        return;
+      }
       sendResponse({ ok: true, settings: updated });
       return;
     }

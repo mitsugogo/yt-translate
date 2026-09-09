@@ -523,13 +523,15 @@ class TranslationPanel {
   }
 
   setState(state, detail = "", progress = null) {
+    if (state === TranslatorState.DOWNLOADING
+      && (this.state === TranslatorState.LISTENING || this.state === TranslatorState.ERROR)) return;
     this.state = state;
     if (!this.root) return;
     const dot = this.root.querySelector('[data-role="dot"]');
     dot.classList.toggle("listening", state === TranslatorState.LISTENING);
     dot.classList.toggle("error", state === TranslatorState.ERROR);
     this.root.querySelector('[data-role="state"]').textContent = STATUS_LABELS[state] || state;
-    this.setDetail(detail);
+    this.setDetail(state === TranslatorState.DOWNLOADING || state === TranslatorState.ERROR ? "" : detail);
     this.setProgress(state === TranslatorState.DOWNLOADING, progress, detail);
   }
 
@@ -581,10 +583,11 @@ class TranslationPanel {
     const container = this.root.querySelector('[data-role="progress"]');
     const bar = this.root.querySelector('[data-role="progress-bar"]');
     const label = this.root.querySelector('[data-role="progress-label"]');
-    container.hidden = !visible;
-    if (!visible) return;
     const hasProgress = Number.isFinite(progress);
     const bounded = hasProgress ? Math.min(1, Math.max(0, progress)) : 0;
+    const complete = hasProgress && bounded >= 1;
+    container.hidden = !visible || complete;
+    if (!visible || complete) return;
     bar.classList.toggle("indeterminate", !hasProgress);
     bar.style.width = hasProgress ? `${Math.round(bounded * 100)}%` : "38%";
     bar.parentElement.setAttribute("role", "progressbar");

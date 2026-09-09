@@ -148,17 +148,12 @@ async function startSession(message) {
   reportState(TranslatorState.INITIALIZING);
   try {
     await current.recognizer.start(stream, { ...settings, preferredLanguage, useHololiveVocabulary: pageContext.isHololive === true });
+    await current.translator.prepare(settings.sourceLanguage, settings.targetLanguage);
   } catch (error) {
     await stopSession();
     throw error;
   }
-
-  // Warm up translation after speech has started. Final transcripts queue until this completes.
-  void current.translator.prepare(settings.sourceLanguage, settings.targetLanguage).then(() => {
-    if (session === current) reportState(TranslatorState.LISTENING);
-  }).catch((error) => {
-    if (session === current) reportError(error, "failed");
-  });
+  if (session === current) reportState(TranslatorState.LISTENING);
   return { ok: true };
 }
 
@@ -172,12 +167,20 @@ async function updateSettings(message) {
   const speechChanged = next.sourceLanguage !== session.settings.sourceLanguage
     || preferredLanguage !== session.preferredLanguage
     || (pageContext.isHololive === true) !== (session.pageContext?.isHololive === true);
+  const translationChanged = next.sourceLanguage !== session.settings.sourceLanguage
+    || next.targetLanguage !== session.settings.targetLanguage;
   session.settings = next;
   session.pageContext = pageContext;
   session.preferredLanguage = preferredLanguage;
-  session.translator.reset();
-  session.queue.clear();
+  if (!speechChanged && !translationChanged) return { ok: true };
+  reportState(TranslatorState.INITIALIZING, "設定変更を反映中…");
+  if (translationChanged) {
+    session.translator.reset();
+    session.queue.clear();
+  }
   if (speechChanged) await session.recognizer.updateSettings({ ...next, preferredLanguage, useHololiveVocabulary: pageContext.isHololive === true });
+  if (translationChanged) await session.translator.prepare(next.sourceLanguage, next.targetLanguage);
+  reportState(TranslatorState.LISTENING);
   return { ok: true };
 }
 

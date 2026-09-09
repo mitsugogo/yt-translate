@@ -21,6 +21,7 @@ const elements = {
 let settings = DEFAULT_SETTINGS;
 let detectedLanguage = null;
 let popupTabId = null;
+let pipelineState = "idle";
 
 function send(message) {
   return chrome.runtime.sendMessage(message).catch((error) => ({ ok: false, error: error.message }));
@@ -36,10 +37,11 @@ function setError(message = "") {
 }
 
 function setProgress(progress = null, visible = true, detail = "") {
-  elements.progress.hidden = !visible;
-  if (!visible) return;
   const hasProgress = Number.isFinite(progress);
   const bounded = hasProgress ? Math.min(1, Math.max(0, progress)) : 0;
+  const complete = hasProgress && bounded >= 1;
+  elements.progress.hidden = !visible || complete;
+  if (!visible || complete) return;
   elements.progressBar.classList.toggle("indeterminate", !hasProgress);
   elements.progressBar.style.width = hasProgress ? `${Math.round(bounded * 100)}%` : "38%";
   if (hasProgress) elements.progressTrack.setAttribute("aria-valuenow", String(Math.round(bounded * 100)));
@@ -89,11 +91,16 @@ async function refresh() {
   popupTabId = response.tab?.id ?? null;
   detectedLanguage = response.session?.detectedLanguage || null;
   elements.status.textContent = describeFeatures(response.features);
-  if (response.session) showActiveStatus();
+  if (response.session) {
+    pipelineState = "listening";
+    showActiveStatus();
+  }
 }
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === MessageType.OFFSCREEN_STATE) {
+    if (message.state === "downloading" && (pipelineState === "listening" || pipelineState === "error")) return;
+    pipelineState = message.state;
     if (message.state === "downloading" && elements.error.hidden) setProgress(message.progress, true, message.detail);
     else if (message.state === "listening" || message.state === "idle" || message.state === "error") {
       setProgress(null, false);
@@ -102,6 +109,7 @@ chrome.runtime.onMessage.addListener((message) => {
   }
   if (message.type === MessageType.POPUP_LANGUAGE && message.tabId === popupTabId) showActiveStatus(message.detectedLanguage);
   if (message.type === MessageType.OFFSCREEN_ERROR) {
+    pipelineState = "error";
     setProgress(null, false);
     setError(message.message || "音声認識・翻訳処理に失敗しました。");
   }
@@ -112,6 +120,7 @@ elements.enabled.addEventListener("change", async () => {
   elements.enabled.disabled = true;
   elements.prepare.disabled = true;
   elements.status.textContent = elements.enabled.checked ? "音声の取得を開始中…" : "停止中…";
+  pipelineState = elements.enabled.checked ? "initializing" : "idle";
   const response = await send({ type: MessageType.SET_ENABLED, enabled: elements.enabled.checked });
   if (!response?.ok) {
     elements.enabled.checked = false;
@@ -122,6 +131,7 @@ elements.enabled.addEventListener("change", async () => {
   if (response?.ok) {
     if (elements.enabled.checked) {
       detectedLanguage = null;
+      setProgress(null, false);
       showActiveStatus();
     } else {
       detectedLanguage = null;
@@ -136,6 +146,13 @@ elements.enabled.addEventListener("change", async () => {
 for (const element of [elements.showOriginal, elements.showTranslation, elements.fontSize, elements.sourceLanguage, elements.autoLanguagePreference, elements.targetLanguage]) {
   element.addEventListener("change", async () => {
     if (element === elements.sourceLanguage) syncTargetOptions();
+    const preparesModels = settings.enabled && [elements.sourceLanguage, elements.autoLanguagePreference, elements.targetLanguage].includes(element);
+    if (preparesModels) {
+      setError();
+      pipelineState = "initializing";
+      elements.status.textContent = "設定に合う音声認識・翻訳モデルを準備中…";
+      setProgress(null, true);
+    }
     const patch = {
       showOriginal: elements.showOriginal.checked,
       showTranslation: elements.showTranslation.checked,
@@ -148,6 +165,7 @@ for (const element of [elements.showOriginal, elements.showTranslation, elements
     if (response?.settings) applySettings(response.settings);
     if (!response?.ok) setError(response?.error || "設定を保存できませんでした。");
     else if (settings.enabled) {
+      if (preparesModels) setProgress(null, false);
       if (element === elements.sourceLanguage) detectedLanguage = null;
       showActiveStatus();
     }
@@ -159,6 +177,7 @@ elements.prepare.addEventListener("click", async () => {
   elements.prepare.disabled = true;
   elements.enabled.disabled = true;
   elements.status.textContent = "音声認識・翻訳モデルを準備中…";
+  pipelineState = "initializing";
   setProgress(null, true);
   const response = await send({ type: MessageType.PREPARE_MODELS });
   if (!response?.ok) {

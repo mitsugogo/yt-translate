@@ -2,6 +2,37 @@ import { getSpeechRecognitionConstructor, ensureSpeechLanguage } from "./speech-
 import { speechError, TranslatorState } from "./speech-state.js";
 
 const RESTART_DELAYS = [500, 1000, 2000, 5000];
+const RECOGNITION_END_TIMEOUT_MS = 1000;
+
+async function abortAndWaitForEnd(recognition) {
+  let timer = null;
+  let resolveEnded;
+  const ended = new Promise((resolve) => {
+    resolveEnded = resolve;
+  });
+  const previousOnEnd = recognition.onend;
+  const finish = () => {
+    if (!resolveEnded) return;
+    const resolve = resolveEnded;
+    resolveEnded = null;
+    if (timer) clearTimeout(timer);
+    resolve();
+  };
+  recognition.onend = (event) => {
+    try {
+      previousOnEnd?.call(recognition, event);
+    } finally {
+      finish();
+    }
+  };
+  timer = setTimeout(finish, RECOGNITION_END_TIMEOUT_MS);
+  try {
+    recognition.abort();
+  } catch {
+    finish();
+  }
+  await ended;
+}
 
 export function applySpeechPhraseHints(recognition, phraseHints = [], scope = globalThis) {
   const Phrase = scope.SpeechRecognitionPhrase;
@@ -184,7 +215,7 @@ export class SpeechRecognizer {
     const recognition = this.recognition;
     this.recognition = null;
     try {
-      recognition?.abort();
+      if (recognition) await abortAndWaitForEnd(recognition);
     } catch {
       // Recognition may already have ended.
     }
@@ -205,11 +236,7 @@ export class SpeechRecognizer {
     const recognition = this.recognition;
     this.recognition = null;
     if (recognition) {
-      try {
-        recognition.abort();
-      } catch {
-        // Recognition may already have ended.
-      }
+      await abortAndWaitForEnd(recognition);
     }
     if (this.audioContext) {
       try {

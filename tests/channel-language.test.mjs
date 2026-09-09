@@ -1,17 +1,21 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { detectChannelLanguageHint, readYoutubePageContext } from "../src/content/channel-language.js";
+import { detectChannelLanguageHint, detectChannelLanguagePriority, readYoutubePageContext } from "../src/content/channel-language.js";
 
 test("uses Japanese as the JP channel preference", () => {
+  assert.deepEqual(detectChannelLanguagePriority({
+    channelIdentity: "Lui ch. 鷹嶺ルイ - holoX -",
+    videoIdentity: "FUWAMOCOとのコラボ配信"
+  }), ["ja"]);
   assert.equal(detectChannelLanguageHint({
     channelIdentity: "Lui ch. 鷹嶺ルイ - holoX -",
     videoIdentity: "FUWAMOCOとのコラボ配信"
   }), "ja");
 });
 
-test("uses English for both EN and ID member channels", () => {
-  assert.equal(detectChannelLanguageHint({ channelIdentity: "FUWAMOCO Ch. hololive-EN" }), "en");
-  assert.equal(detectChannelLanguageHint({ channelIdentity: "Kobo Kanaeru Ch. hololive-ID" }), "en");
+test("uses branch-specific language priorities for EN and ID member channels", () => {
+  assert.deepEqual(detectChannelLanguagePriority({ channelIdentity: "FUWAMOCO Ch. hololive-EN" }), ["en", "ja"]);
+  assert.deepEqual(detectChannelLanguagePriority({ channelIdentity: "Kobo Kanaeru Ch. hololive-ID" }), ["id", "en", "ja"]);
 });
 
 test("falls back to affiliation in the video title and otherwise stays neutral", () => {
@@ -30,5 +34,6 @@ test("marks a known member channel for Hololive vocabulary", () => {
     }
   });
   assert.equal(context.channelLanguageHint, "ja");
+  assert.deepEqual(context.channelLanguagePriority, ["ja"]);
   assert.equal(context.isHololive, true);
 });
