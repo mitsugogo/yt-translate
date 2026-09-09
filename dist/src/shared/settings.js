@@ -85,8 +85,16 @@ export function getSpeechLanguagesForSource(sourceLanguage) {
 }
 
 export function resolveAutoLanguagePreference(preference, channelLanguageHint = null) {
-  if (preference === "channel") return ["ja", "en", "id"].includes(channelLanguageHint) ? channelLanguageHint : null;
-  return ["ja", "en", "id"].includes(preference) ? preference : null;
+  return resolveAutoLanguagePriority(preference, null, channelLanguageHint)[0] || null;
+}
+
+export function resolveAutoLanguagePriority(preference, channelLanguagePriority = null, channelLanguageHint = null) {
+  const supported = (languages) => [...new Set(languages.filter((language) => ["ja", "en", "id"].includes(language)))];
+  if (preference === "channel") {
+    if (Array.isArray(channelLanguagePriority)) return supported(channelLanguagePriority);
+    return supported([channelLanguageHint]);
+  }
+  return supported([preference]);
 }
 
 export function getLanguageLabel(language) {

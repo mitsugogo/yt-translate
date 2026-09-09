@@ -124,8 +124,16 @@ function getSpeechLanguagesForSource(sourceLanguage) {
 }
 
 function resolveAutoLanguagePreference(preference, channelLanguageHint = null) {
-  if (preference === "channel") return ["ja", "en", "id"].includes(channelLanguageHint) ? channelLanguageHint : null;
-  return ["ja", "en", "id"].includes(preference) ? preference : null;
+  return resolveAutoLanguagePriority(preference, null, channelLanguageHint)[0] || null;
+}
+
+function resolveAutoLanguagePriority(preference, channelLanguagePriority = null, channelLanguageHint = null) {
+  const supported = (languages) => [...new Set(languages.filter((language) => ["ja", "en", "id"].includes(language)))];
+  if (preference === "channel") {
+    if (Array.isArray(channelLanguagePriority)) return supported(channelLanguagePriority);
+    return supported([channelLanguageHint]);
+  }
+  return supported([preference]);
 }
 
 function getLanguageLabel(language) {
@@ -177,7 +185,7 @@ function isYouTubeVideoUrl(url = "") {
   }
 }
 
-return { DEFAULT_SETTINGS, SOURCE_LANGUAGE_OPTIONS, TARGET_LANGUAGE_OPTIONS, AUTO_SPEECH_LANGUAGES, AUTO_LANGUAGE_PREFERENCE_OPTIONS, normalizeSettings, readSettings, writeSettings, toModelLanguage, getTargetLanguageForSource, getSpeechLanguagesForSource, resolveAutoLanguagePreference, getLanguageLabel, formatLanguageDirection, getJapaneseLanguageLabel, formatActiveTranslationStatus, shouldTranslateSource, getVideoId, isYouTubeVideoUrl };
+return { DEFAULT_SETTINGS, SOURCE_LANGUAGE_OPTIONS, TARGET_LANGUAGE_OPTIONS, AUTO_SPEECH_LANGUAGES, AUTO_LANGUAGE_PREFERENCE_OPTIONS, normalizeSettings, readSettings, writeSettings, toModelLanguage, getTargetLanguageForSource, getSpeechLanguagesForSource, resolveAutoLanguagePreference, resolveAutoLanguagePriority, getLanguageLabel, formatLanguageDirection, getJapaneseLanguageLabel, formatActiveTranslationStatus, shouldTranslateSource, getVideoId, isYouTubeVideoUrl };
 })();
 modules[3] = (() => {
 const { getVideoId: getSharedVideoId } = modules[2];
@@ -320,18 +328,23 @@ function matchesAny(value, patterns) {
   return patterns.some((pattern) => pattern.test(value));
 }
 
-function detectChannelLanguageHint({ channelIdentity = "", videoIdentity = "" } = {}) {
+function detectChannelLanguagePriority({ channelIdentity = "", videoIdentity = "" } = {}) {
   const channel = String(channelIdentity);
   const video = String(videoIdentity);
 
-  // EN and ID members normally speak English. Check these branches first because
-  // Japanese video titles can still contain the generic ホロライブ label.
-  if (containsAny(channel, ENGLISH_BRANCH_MEMBERS) || matchesAny(channel, ENGLISH_BRANCH_PATTERNS)) return "en";
-  if (containsAny(channel, INDONESIA_BRANCH_MEMBERS) || matchesAny(channel, INDONESIA_BRANCH_PATTERNS)) return "en";
-  if (matchesAny(channel, JAPAN_BRANCH_PATTERNS) || JAPANESE_CHARACTERS.test(channel)) return "ja";
-  if (matchesAny(video, ENGLISH_BRANCH_PATTERNS) || matchesAny(video, INDONESIA_BRANCH_PATTERNS)) return "en";
-  if (matchesAny(video, JAPAN_BRANCH_PATTERNS)) return "ja";
-  return null;
+  // Check the channel before the title so a collaborator or Japanese title does
+  // not override the member's own branch. Unlisted languages stay neutral.
+  if (containsAny(channel, INDONESIA_BRANCH_MEMBERS) || matchesAny(channel, INDONESIA_BRANCH_PATTERNS)) return ["id", "en", "ja"];
+  if (containsAny(channel, ENGLISH_BRANCH_MEMBERS) || matchesAny(channel, ENGLISH_BRANCH_PATTERNS)) return ["en", "ja"];
+  if (matchesAny(channel, JAPAN_BRANCH_PATTERNS) || JAPANESE_CHARACTERS.test(channel)) return ["ja"];
+  if (matchesAny(video, INDONESIA_BRANCH_PATTERNS)) return ["id", "en", "ja"];
+  if (matchesAny(video, ENGLISH_BRANCH_PATTERNS)) return ["en", "ja"];
+  if (matchesAny(video, JAPAN_BRANCH_PATTERNS)) return ["ja"];
+  return [];
+}
+
+function detectChannelLanguageHint(context = {}) {
+  return detectChannelLanguagePriority(context)[0] || null;
 }
 
 function readNodeIdentity(node) {
@@ -353,13 +366,15 @@ function readYoutubePageContext(doc = document) {
     ...videoSelectors.map((selector) => readNodeIdentity(doc.querySelector?.(selector))),
     doc.title || ""
   ].filter(Boolean).join(" ");
+  const channelLanguagePriority = detectChannelLanguagePriority({ channelIdentity, videoIdentity });
   return {
-    channelLanguageHint: detectChannelLanguageHint({ channelIdentity, videoIdentity }),
+    channelLanguagePriority,
+    channelLanguageHint: channelLanguagePriority[0] || null,
     isHololive: isKnownHololiveMember(channelIdentity) || matchesAny(`${channelIdentity}\n${videoIdentity}`, HOLOLIVE_CONTEXT_PATTERNS)
   };
 }
 const { isKnownHololiveMember } = modules[5];
-return { detectChannelLanguageHint, readYoutubePageContext };
+return { detectChannelLanguagePriority, detectChannelLanguageHint, readYoutubePageContext };
 })();
 modules[6] = (() => {
 class YoutubeNavigation {

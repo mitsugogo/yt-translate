@@ -90,7 +90,9 @@ test("ordered language priorities resolve otherwise equal candidates", async () 
     { text: "…", sourceLanguage: "id-ID", confidence: 0.5 }
   ];
   assert.equal((await selectSpeechCandidate(candidates, null, ["id", "en", "ja"])).sourceLanguage, "id-ID");
+  assert.equal((await selectSpeechCandidate(candidates.slice(0, 2), null, ["id", "en", "ja"])).sourceLanguage, "en-US");
   assert.equal((await selectSpeechCandidate(candidates, null, ["en", "ja"])).sourceLanguage, "en-US");
+  assert.equal((await selectSpeechCandidate([candidates[0], candidates[2]], null, ["en", "ja"])).sourceLanguage, "ja-JP");
   assert.equal((await selectSpeechCandidate(candidates, null, ["ja"])).sourceLanguage, "ja-JP");
 });
 

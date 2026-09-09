@@ -83,7 +83,7 @@ async function sendToTab(tabId, message) {
 }
 
 async function getPageContext(tabId, provided = null) {
-  if (provided?.channelLanguageHint) return provided;
+  if (provided?.channelLanguagePriority?.length || provided?.channelLanguageHint) return provided;
   const response = await sendToTab(tabId, { type: MessageType.REQUEST_PAGE_CONTEXT });
   return response?.pageContext || provided || {};
 }

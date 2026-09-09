@@ -7,15 +7,16 @@ import { getHololiveSpeechPhrases } from "./hololive-vocabulary.js";
 
 const FINAL_CANDIDATE_WAIT_MS = 700;
 
-function preferenceBoost(candidate, preferredLanguage) {
-  if (!preferredLanguage || toModelLanguage(candidate.sourceLanguage) !== toModelLanguage(preferredLanguage)) return 0;
+function preferenceBoost(candidate, preferredLanguages) {
+  const priorities = Array.isArray(preferredLanguages) ? preferredLanguages : preferredLanguages ? [preferredLanguages] : [];
+  const rank = priorities.findIndex((language) => toModelLanguage(candidate.sourceLanguage) === toModelLanguage(language));
+  if (rank < 0) return 0;
   const meaningfulLength = [...candidate.text.replace(/[^\p{L}\p{N}]/gu, "")].length;
-  if (meaningfulLength <= 3) return 0.42;
-  if (meaningfulLength <= 6) return 0.22;
-  return 0.12;
+  const firstChoiceBoost = meaningfulLength <= 3 ? 0.42 : meaningfulLength <= 6 ? 0.22 : 0.12;
+  return firstChoiceBoost / (rank + 1);
 }
 
-function scoreCandidateWithoutDetector(candidate, preferredLanguage = null) {
+function scoreCandidateWithoutDetector(candidate, preferredLanguages = []) {
   const language = toModelLanguage(candidate.sourceLanguage);
   const heuristic = detectLanguageHeuristically(candidate.text, language);
   const confidence = Number.isFinite(candidate.confidence) ? candidate.confidence : 0;
@@ -23,13 +24,13 @@ function scoreCandidateWithoutDetector(candidate, preferredLanguage = null) {
   if (heuristic.detectedLanguage === language) score += heuristic.confidence;
   else score -= heuristic.confidence * 0.5;
   if (language === "ja" && /[\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Han}]/u.test(candidate.text)) score += 0.8;
-  return score + preferenceBoost(candidate, preferredLanguage);
+  return score + preferenceBoost(candidate, preferredLanguages);
 }
 
-export async function selectSpeechCandidate(candidates, detector = null, preferredLanguage = null) {
+export async function selectSpeechCandidate(candidates, detector = null, preferredLanguages = []) {
   if (!candidates?.length) return null;
   const scored = await Promise.all(candidates.map(async (candidate) => {
-    let score = scoreCandidateWithoutDetector(candidate, preferredLanguage);
+    let score = scoreCandidateWithoutDetector(candidate, preferredLanguages);
     if (detector) {
       const results = await detector.detect(candidate.text, candidate.sourceLanguage);
       const language = toModelLanguage(candidate.sourceLanguage);
@@ -94,7 +95,7 @@ export class MultilingualSpeechRecognizer {
   handleInterim(candidate) {
     const language = toModelLanguage(candidate.sourceLanguage);
     this.interimCandidates.set(language, candidate);
-    const chosen = [...this.interimCandidates.values()].sort((left, right) => scoreCandidateWithoutDetector(right, this.settings.preferredLanguage) - scoreCandidateWithoutDetector(left, this.settings.preferredLanguage))[0];
+    const chosen = [...this.interimCandidates.values()].sort((left, right) => scoreCandidateWithoutDetector(right, this.settings.preferredLanguages) - scoreCandidateWithoutDetector(left, this.settings.preferredLanguages))[0];
     if (chosen) this.onInterim?.(chosen);
     if (this.interimTimer) clearTimeout(this.interimTimer);
     this.interimTimer = setTimeout(() => this.interimCandidates.clear(), FINAL_CANDIDATE_WAIT_MS);
@@ -110,13 +111,13 @@ export class MultilingualSpeechRecognizer {
   async flushFinalCandidates() {
     const candidates = this.finalCandidates.splice(0);
     this.finalTimer = null;
-    const chosen = await selectSpeechCandidate(candidates, this.detector, this.settings.preferredLanguage);
+    const chosen = await selectSpeechCandidate(candidates, this.detector, this.settings.preferredLanguages);
     if (chosen) this.onFinal?.(chosen);
   }
 
   async updateSettings(settings) {
     const sourceChanged = settings.sourceLanguage !== this.settings.sourceLanguage
-      || settings.preferredLanguage !== this.settings.preferredLanguage
+      || (settings.preferredLanguages || []).join(",") !== (this.settings.preferredLanguages || []).join(",")
       || settings.useHololiveVocabulary !== this.settings.useHololiveVocabulary;
     this.settings = settings;
     if (!sourceChanged || !this.stream) return;
