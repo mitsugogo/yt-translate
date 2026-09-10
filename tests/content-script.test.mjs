@@ -99,9 +99,9 @@ test("classic content bundle mounts the panel before metadata and accepts transl
   assert.equal(fields.get('[data-role="translation"]').textContent, "こんにちは");
   receive({ type: "transcript:result", videoId: "example", id: "ja-1", original: "こんばんは", sourceLanguage: "ja-JP", isFinal: true, willTranslate: false });
   assert.equal(fields.get('[data-role="original"]').textContent, "こんばんは");
-  assert.equal(fields.get('[data-role="translation"]').textContent, "");
+  assert.equal(fields.get('[data-role="translation"]').textContent, "こんにちは");
   receive({ type: "translation:result", videoId: "example", id: "en-1", original: "Hello", translated: "遅れて届いた翻訳" });
-  assert.equal(fields.get('[data-role="translation"]').textContent, "");
+  assert.equal(fields.get('[data-role="translation"]').textContent, "こんにちは");
   receive({ type: "session:state", videoId: "example", state: "downloading", detail: "言語判定モデル 100%", progress: 1 });
   assert.equal(fields.get('[data-role="progress"]').hidden, true);
   assert.equal(fields.get('[data-role="detail"]').hidden, true);
@@ -127,6 +127,63 @@ test("panel stays hidden while disabled and follows popup settings", async () =>
     settings: { enabled: false, sourceLanguage: "auto", autoLanguagePreference: "channel", targetLanguage: "ja", showOriginal: true, showTranslation: true, fontSize: 15 }
   });
   assert.equal(harness.status().hostRemoved, true);
+});
+
+test("early translated chunks retain their provisional status in the panel", async () => {
+  const { receive, fields } = await createContentHarness();
+  receive({ type: "transcript:result", videoId: "example", id: "early-1", original: "早めに表示する部分", isFinal: false });
+  receive({ type: "translation:result", videoId: "example", id: "early-1", original: "早めに表示する部分", translated: "An early segment", isFinal: false });
+  assert.equal(fields.get('[data-role="original"]').dataset.final, "false");
+  assert.equal(fields.get('[data-role="translation"]').textContent, "An early segment");
+});
+
+test("completed translation remains visible throughout subsequent interim and segment updates", async () => {
+  const { receive, fields } = await createContentHarness();
+  receive({ type: "transcript:result", videoId: "example", id: "chunk-1", original: "The first sentence", isFinal: false });
+  receive({ type: "translation:result", videoId: "example", id: "chunk-1", original: "The first sentence", translated: "最初の文章です", isFinal: false });
+  for (let index = 0; index < 20; index += 1) {
+    receive({ type: "transcript:result", videoId: "example", id: "interim", original: `Next sentence ${index}`, isFinal: false });
+    assert.equal(fields.get('[data-role="translation"]').textContent, "最初の文章です");
+  }
+  receive({ type: "transcript:result", videoId: "example", id: "chunk-2", original: "The second sentence", isFinal: true });
+  assert.equal(fields.get('[data-role="translation"]').textContent, "最初の文章です");
+  receive({ type: "translation:result", videoId: "example", id: "chunk-2", original: "The second sentence", translated: "次の文章です" });
+  assert.equal(fields.get('[data-role="translation"]').textContent, "次の文章です");
+});
+
+test("a translation that finishes after the original advances is displayed without rewinding the original", async () => {
+  const { receive, fields } = await createContentHarness();
+  receive({ type: "transcript:result", videoId: "example", id: "chunk-1", original: "First sentence", isFinal: true });
+  receive({ type: "transcript:result", videoId: "example", id: "chunk-2", original: "Second sentence", isFinal: false });
+  receive({ type: "transcript:result", videoId: "example", id: "interim", original: "Currently speaking", isFinal: false });
+  receive({ type: "translation:result", videoId: "example", id: "chunk-1", original: "First sentence", translated: "最初の文章です" });
+  assert.equal(fields.get('[data-role="original"]').textContent, "Currently speaking");
+  assert.equal(fields.get('[data-role="translation"]').textContent, "最初の文章です");
+  receive({ type: "translation:result", videoId: "example", id: "chunk-2", original: "Second sentence", translated: "次の文章です", isFinal: false });
+  assert.equal(fields.get('[data-role="original"]').textContent, "Currently speaking");
+  assert.equal(fields.get('[data-role="translation"]').textContent, "次の文章です");
+});
+
+test("out-of-order and duplicate translations cannot replace a newer displayed translation", async () => {
+  const { receive, fields } = await createContentHarness();
+  for (const id of ["chunk-1", "chunk-2"]) receive({ type: "transcript:result", videoId: "example", id, original: id, isFinal: true });
+  receive({ type: "translation:result", videoId: "example", id: "chunk-2", original: "chunk-2", translated: "新しい翻訳" });
+  receive({ type: "translation:result", videoId: "example", id: "chunk-1", original: "chunk-1", translated: "遅れて届いた古い翻訳" });
+  receive({ type: "translation:result", videoId: "example", id: "chunk-2", original: "chunk-2", translated: "重複した結果" });
+  assert.equal(fields.get('[data-role="translation"]').textContent, "新しい翻訳");
+});
+
+test("language changes clear old translations and reject in-flight results from previous settings", async () => {
+  const { receive, fields } = await createContentHarness();
+  receive({ type: "transcript:result", videoId: "example", id: "old", original: "hello", isFinal: true });
+  receive({ type: "translation:result", videoId: "example", id: "old", original: "hello", translated: "こんにちは" });
+  receive({ type: "session:offscreen-settings", settings: { enabled: true, sourceLanguage: "auto", targetLanguage: "en", showOriginal: true, showTranslation: true, fontSize: 15 } });
+  assert.equal(fields.get('[data-role="translation"]').textContent, "");
+  receive({ type: "translation:result", videoId: "example", id: "old", original: "hello", translated: "古い設定の結果" });
+  assert.equal(fields.get('[data-role="translation"]').textContent, "");
+  receive({ type: "transcript:result", videoId: "example", id: "new", original: "こんばんは", isFinal: true });
+  receive({ type: "translation:result", videoId: "example", id: "new", original: "こんばんは", translated: "Good evening" });
+  assert.equal(fields.get('[data-role="translation"]').textContent, "Good evening");
 });
 
 test("invalidated extension context stops observers and removes the stale panel", async () => {

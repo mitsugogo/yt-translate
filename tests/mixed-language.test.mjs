@@ -36,7 +36,8 @@ test("translates each mixed-language run into the selected target", async () => 
 test("provides Hololive names and glossary phrases to local recognition", () => {
   const japanese = getHololiveSpeechPhrases("ja-JP");
   const english = getHololiveSpeechPhrases("en-US");
-  assert.ok(japanese.some(({ phrase, boost }) => phrase === "あえんびえん" && boost >= 8));
+  assert.ok(japanese.some(({ phrase }) => phrase === "あえんびえん"));
+  assert.ok([...japanese, ...english].every(({ boost }) => boost > 0 && boost <= 1));
   assert.ok(japanese.some(({ phrase }) => phrase === "さくらみこ"));
   assert.ok(english.some(({ phrase }) => phrase === "Sakura Miko"));
 });
@@ -68,7 +69,7 @@ test("candidate selection uses recognition confidence and language detection", a
 
 test("preferred language resolves a close short-utterance decision", async () => {
   const candidates = [
-    { text: "あー", sourceLanguage: "ja-JP", confidence: 0.2 },
+    { text: "あー", sourceLanguage: "ja-JP", confidence: 0.7 },
     { text: "are", sourceLanguage: "en-US", confidence: 0.9 }
   ];
   assert.equal((await selectSpeechCandidate(candidates)).sourceLanguage, "en-US");
@@ -85,9 +86,9 @@ test("preferred language remains a small bias for clear longer speech", async ()
 
 test("ordered language priorities resolve otherwise equal candidates", async () => {
   const candidates = [
-    { text: "…", sourceLanguage: "ja-JP", confidence: 0.5 },
-    { text: "…", sourceLanguage: "en-US", confidence: 0.5 },
-    { text: "…", sourceLanguage: "id-ID", confidence: 0.5 }
+    { text: "123", sourceLanguage: "ja-JP", confidence: 0.5 },
+    { text: "123", sourceLanguage: "en-US", confidence: 0.5 },
+    { text: "123", sourceLanguage: "id-ID", confidence: 0.5 }
   ];
   assert.equal((await selectSpeechCandidate(candidates, null, ["id", "en", "ja"])).sourceLanguage, "id-ID");
   assert.equal((await selectSpeechCandidate(candidates.slice(0, 2), null, ["id", "en", "ja"])).sourceLanguage, "en-US");
@@ -102,8 +103,8 @@ test("learns the dominant language from final speech within one session", async 
     learner.observe({ text: "terima kasih semuanya", sourceLanguage: "id-ID", confidence: 0.85 });
   }
   const closeCandidates = [
-    { text: "…", sourceLanguage: "en-US", confidence: 0.61 },
-    { text: "…", sourceLanguage: "id-ID", confidence: 0.5 }
+    { text: "123", sourceLanguage: "en-US", confidence: 0.61 },
+    { text: "123", sourceLanguage: "id-ID", confidence: 0.5 }
   ];
   assert.equal((await selectSpeechCandidate(closeCandidates)).sourceLanguage, "en-US");
   assert.equal((await selectSpeechCandidate(closeCandidates, null, [], learner)).sourceLanguage, "id-ID");

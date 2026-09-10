@@ -122,9 +122,9 @@ async function startSession(message) {
         useHololiveVocabulary: current.pageContext.isHololive === true
       })
     },
-    onResult: ({ id, text, translated, timestamp, sourceLanguage }) => {
+    onResult: ({ id, text, translated, timestamp, sourceLanguage, isProvisional }) => {
       if (session !== current) return;
-      void send({ type: MessageType.OFFSCREEN_TRANSLATION, tabId: current.tabId, videoId: current.videoId, id, original: text, translated, sourceLanguage, timestamp });
+      void send({ type: MessageType.OFFSCREEN_TRANSLATION, tabId: current.tabId, videoId: current.videoId, id, original: text, translated, sourceLanguage, timestamp, isFinal: !isProvisional });
     },
     onError: ({ error }) => reportError(error, "failed")
   });
@@ -135,12 +135,12 @@ async function startSession(message) {
       if (session !== current) return;
       void send({ type: MessageType.OFFSCREEN_TRANSCRIPT, tabId: current.tabId, videoId: current.videoId, id: "interim", original: text, sourceLanguage, isFinal: false, timestamp });
     },
-    onFinal: ({ text, sourceLanguage, timestamp }) => {
+    onFinal: ({ text, sourceLanguage, timestamp, isProvisional }) => {
       if (session !== current) return;
       const id = crypto.randomUUID();
       const willTranslate = shouldTranslateSource(sourceLanguage, current.settings.targetLanguage);
-      void send({ type: MessageType.OFFSCREEN_TRANSCRIPT, tabId: current.tabId, videoId: current.videoId, id, original: text, sourceLanguage, isFinal: true, willTranslate, timestamp });
-      if (willTranslate) current.queue.enqueue({ id, text, sourceLanguage, timestamp });
+      void send({ type: MessageType.OFFSCREEN_TRANSCRIPT, tabId: current.tabId, videoId: current.videoId, id, original: text, sourceLanguage, isFinal: !isProvisional, willTranslate, timestamp });
+      if (willTranslate) current.queue.enqueue({ id, text, sourceLanguage, timestamp, isProvisional });
     },
     onError: (error) => reportError(error, "start_failed")
   });

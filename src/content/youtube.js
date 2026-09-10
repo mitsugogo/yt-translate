@@ -121,7 +121,7 @@ function handleRuntimeMessage(message, _sender, sendResponse) {
   if (message.type === MessageType.OFFSCREEN_STATE) panel?.setState(message.state, message.detail, message.progress);
   if (message.type === MessageType.OFFSCREEN_TRANSCRIPT) panel?.setTranscript(message.original, message.isFinal, message.id);
   if (message.type === MessageType.OFFSCREEN_TRANSLATION) {
-    panel?.setTranslationResult(message.original, message.translated, message.id);
+    panel?.setTranslationResult(message.original, message.translated, message.id, message.isFinal !== false);
   }
   if (message.type === MessageType.OFFSCREEN_ERROR) panel?.setError(message.message || "音声認識・翻訳処理に失敗しました。");
 }

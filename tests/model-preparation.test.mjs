@@ -89,6 +89,47 @@ test("waits for an aborted recognition to end before reusing its audio track", a
   await second.stop({ keepAudio: true });
 });
 
+test("does not report a deliberate recognition abort while applying settings", async (t) => {
+  let activeRecognition = null;
+  class SpeechRecognition {
+    processLocally = true;
+    static async available() { return "available"; }
+    start() {
+      if (activeRecognition) throw new Error("recognition is already active");
+      activeRecognition = this;
+      this.onstart?.({});
+    }
+    abort() {
+      setImmediate(() => {
+        this.onerror?.({ error: "aborted", message: "The recognition was aborted." });
+        if (activeRecognition === this) activeRecognition = null;
+        this.onend?.({});
+      });
+    }
+  }
+  const previousSpeechRecognition = globalThis.SpeechRecognition;
+  t.after(() => { globalThis.SpeechRecognition = previousSpeechRecognition; });
+  globalThis.SpeechRecognition = SpeechRecognition;
+  const stream = {
+    getAudioTracks: () => [{ readyState: "live" }],
+    getTracks: () => []
+  };
+  const errors = [];
+  const recognizer = new SpeechRecognizer({
+    manageAudioOutput: false,
+    stopStream: false,
+    onError: (error) => errors.push(error)
+  });
+
+  await recognizer.start(stream, { sourceLanguage: "en-US" });
+  await recognizer.updateSettings({ sourceLanguage: "ja-JP" });
+
+  assert.equal(activeRecognition?.lang, "ja-JP");
+  assert.deepEqual(errors, []);
+  await recognizer.stop({ keepAudio: true });
+  assert.deepEqual(errors, []);
+});
+
 test("popup updates the detected language and clears a failed start state", async (t) => {
   const nodes = new Map();
   const document = { querySelector(id) {

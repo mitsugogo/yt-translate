@@ -47,6 +47,10 @@ export class TranslationPanel {
     this.features = null;
     this.settings = null;
     this.currentTranscriptId = null;
+    this.currentTranslationId = null;
+    this.translationOrder = new Map();
+    this.nextTranslationOrder = 0;
+    this.displayedTranslationOrder = 0;
   }
 
   mount(target) {
@@ -92,6 +96,16 @@ export class TranslationPanel {
   }
 
   setSettings(settings) {
+    if (this.settings && (this.settings.sourceLanguage !== settings.sourceLanguage
+      || this.settings.targetLanguage !== settings.targetLanguage)) {
+      this.translationOrder.clear();
+      // Reject in-flight results for the previous language settings, including
+      // unannounced results, until a new transcript is registered.
+      this.nextTranslationOrder += 1;
+      this.displayedTranslationOrder = this.nextTranslationOrder;
+      this.currentTranslationId = null;
+      if (this.root) this.root.querySelector('[data-role="translation"]').textContent = "";
+    }
     this.settings = settings;
     if (!this.root) return;
     this.root.querySelector('[data-role="original"]').hidden = settings.showOriginal === false;
@@ -125,10 +139,8 @@ export class TranslationPanel {
 
   setTranscript(text, isFinal, id = null) {
     if (!this.root) return;
-    if (id && id !== this.currentTranscriptId) {
-      this.currentTranscriptId = id;
-      this.root.querySelector('[data-role="translation"]').textContent = "";
-    }
+    if (id) this.currentTranscriptId = id;
+    if (id && id !== "interim") this.registerTranslation(id);
     this.root.querySelector('[data-role="original"]').textContent = text || "";
     this.root.querySelector('[data-role="original"]').dataset.final = String(Boolean(isFinal));
     this.renderEmptyState();
@@ -136,15 +148,34 @@ export class TranslationPanel {
 
   setTranslation(text, id = null) {
     if (!this.root) return;
-    if (id && this.currentTranscriptId && id !== this.currentTranscriptId) return;
+    if (id && this.currentTranslationId && id !== this.currentTranslationId) return;
     this.root.querySelector('[data-role="translation"]').textContent = text || "";
     this.renderEmptyState();
   }
 
-  setTranslationResult(original, translated, id = null) {
-    if (id && this.currentTranscriptId && id !== this.currentTranscriptId) return;
-    this.setTranscript(original, true, id);
+  setTranslationResult(original, translated, id = null, isFinal = true) {
+    if (!this.root || !translated?.trim()) return;
+    if (id) {
+      let order = this.translationOrder.get(id);
+      // A panel can mount just as the first translation arrives.
+      if (order === undefined && this.nextTranslationOrder === 0) order = this.registerTranslation(id);
+      if (order === undefined || order <= this.displayedTranslationOrder) return;
+      this.displayedTranslationOrder = order;
+      this.currentTranslationId = id;
+    }
+    // The latest original keeps updating independently. A delayed translation
+    // must neither disappear nor rewind the live transcription.
+    if (!this.currentTranscriptId || this.currentTranscriptId === id) this.setTranscript(original, isFinal, id);
     this.setTranslation(translated, id);
+  }
+
+  registerTranslation(id) {
+    if (!this.translationOrder.has(id)) {
+      this.translationOrder.set(id, ++this.nextTranslationOrder);
+      // Only retain ordering metadata for recent/in-flight chunks, never a log.
+      if (this.translationOrder.size > 64) this.translationOrder.delete(this.translationOrder.keys().next().value);
+    }
+    return this.translationOrder.get(id);
   }
 
   setWarning(message) {
@@ -198,5 +229,9 @@ export class TranslationPanel {
     this.host = null;
     this.root = null;
     this.currentTranscriptId = null;
+    this.currentTranslationId = null;
+    this.translationOrder.clear();
+    this.nextTranslationOrder = 0;
+    this.displayedTranslationOrder = 0;
   }
 }

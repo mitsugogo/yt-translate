@@ -32,15 +32,15 @@ const MEMBERS = [
 ];
 
 const JAPANESE_TERMS = [
-  ["あえんびえん", 8], ["ホロライブ", 6], ["ホロメン", 6], ["ホロリス", 5],
-  ["ホロックス", 6], ["リグロス", 6], ["フロウグロウ", 6], ["みこち", 5],
-  ["すいちゃん", 4], ["ぺこら", 4], ["船長", 3], ["団長", 3], ["こんこよ", 5],
-  ["こんぺこ", 5], ["おつぺこ", 5], ["にぇ", 3], ["しゅば", 3], ["んなたん", 4], ["やごー", 4]
+  "あえんびえん", "ホロライブ", "ホロメン", "ホロリス",
+  "ホロックス", "リグロス", "フロウグロウ", "みこち",
+  "すいちゃん", "ぺこら", "船長", "団長", "こんこよ",
+  "こんぺこ", "おつぺこ", "にぇ", "しゅば", "んなたん", "やごー"
 ];
 
 const LATIN_TERMS = [
-  ["hololive", 6], ["holoEN", 6], ["holoID", 6], ["holoX", 6], ["ReGLOSS", 6],
-  ["FLOW GLOW", 6], ["FUWAMOCO", 6], ["YAGOO", 5], ["aenbien", 8]
+  "hololive", "holoEN", "holoID", "holoX", "ReGLOSS",
+  "FLOW GLOW", "FUWAMOCO", "YAGOO", "aenbien"
 ];
 
 const EXACT_GLOSSARY = [
@@ -60,8 +60,9 @@ function uniquePhrases(entries) {
 
 export function getHololiveSpeechPhrases(language) {
   const modelLanguage = String(language).split("-")[0].toLowerCase();
-  const names = MEMBERS.map(([ja, en]) => ({ phrase: modelLanguage === "ja" ? ja : en, boost: 5 }));
-  const terms = (modelLanguage === "ja" ? JAPANESE_TERMS : LATIN_TERMS).map(([phrase, boost]) => ({ phrase, boost }));
+  const names = MEMBERS.map(([ja, en]) => ({ phrase: modelLanguage === "ja" ? ja : en, boost: 1 }));
+  // Boost is logarithmic; even fixed-language recognition needs only a light hint.
+  const terms = (modelLanguage === "ja" ? JAPANESE_TERMS : LATIN_TERMS).map((phrase) => ({ phrase, boost: 1 }));
   return uniquePhrases([...names, ...terms]);
 }
 

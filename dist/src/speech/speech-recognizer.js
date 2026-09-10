@@ -1,5 +1,6 @@
 import { getSpeechRecognitionConstructor, ensureSpeechLanguage } from "./speech-language.js";
 import { speechError, TranslatorState } from "./speech-state.js";
+import { TranscriptSegmenter } from "./transcript-segmenter.js";
 
 const RESTART_DELAYS = [500, 1000, 2000, 5000];
 const RECOGNITION_END_TIMEOUT_MS = 1000;
@@ -62,6 +63,7 @@ export class SpeechRecognizer {
     this.restartTimer = null;
     this.restartAttempt = 0;
     this.isStarting = false;
+    this.segmenters = new Map();
   }
 
   async start(stream, settings = this.settings) {
@@ -117,9 +119,12 @@ export class SpeechRecognizer {
     recognition.processLocally = true;
     applySpeechPhraseHints(recognition, this.settings.phraseHints);
 
+    let lastFinalIndex = -1;
     recognition.onresult = (event) => {
-      const interim = [];
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      if (!this.shouldRun || this.recognition !== recognition) return;
+      // Include unchanged interim entries: resultIndex only identifies the first
+      // changed entry, not the start of the entire pending utterance.
+      for (let index = lastFinalIndex + 1; index < event.results.length; index += 1) {
         const result = event.results[index];
         const alternative = result?.[0];
         const text = alternative?.transcript?.trim();
@@ -131,22 +136,33 @@ export class SpeechRecognizer {
           timestamp: performance.now()
         };
         if (result.isFinal) {
-          this.onFinal?.(candidate);
-        } else {
-          interim.push(candidate);
+          lastFinalIndex = index;
+        }
+        let segmenter = this.segmenters.get(index);
+        if (!segmenter) {
+          segmenter = new TranscriptSegmenter({
+            language: candidate.sourceLanguage,
+            onSegment: (segment) => this.onFinal?.(segment),
+            onInterim: (segment) => this.onInterim?.(segment)
+          });
+          this.segmenters.set(index, segmenter);
+        }
+        segmenter.update(candidate, result.isFinal);
+        if (result.isFinal) {
+          segmenter.dispose();
+          this.segmenters.delete(index);
         }
       }
-      if (interim.length > 0) {
-        this.onInterim?.({
-          text: interim.map((candidate) => candidate.text).join(" "),
-          sourceLanguage: this.settings.sourceLanguage,
-          confidence: Math.max(...interim.map((candidate) => candidate.confidence)),
-          timestamp: performance.now()
-        });
+      for (const [index, segmenter] of this.segmenters) {
+        if (index >= event.results.length || !event.results[index]?.[0]?.transcript?.trim()) {
+          segmenter.dispose();
+          this.segmenters.delete(index);
+        }
       }
     };
 
     recognition.onerror = (event) => {
+      if (event.error === "aborted" && !this.shouldRun) return;
       if (event.error === "no-speech") {
         this.onState?.(TranslatorState.PAUSED);
         return;
@@ -162,6 +178,9 @@ export class SpeechRecognizer {
     };
 
     recognition.onend = () => {
+      // Ignore a late end from an instance already replaced during settings changes.
+      if (this.recognition && this.recognition !== recognition) return;
+      this.clearSegmenters();
       this.recognition = null;
       if (!this.shouldRun) {
         this.onState?.(TranslatorState.IDLE);
@@ -190,6 +209,11 @@ export class SpeechRecognizer {
     }
   }
 
+  clearSegmenters() {
+    for (const segmenter of this.segmenters.values()) segmenter.dispose();
+    this.segmenters.clear();
+  }
+
   scheduleRestart() {
     if (this.restartTimer || !this.shouldRun) return;
     const delay = RESTART_DELAYS[Math.min(this.restartAttempt, RESTART_DELAYS.length - 1)];
@@ -210,6 +234,7 @@ export class SpeechRecognizer {
     if (!wasRunning) return;
 
     this.shouldRun = false;
+    this.clearSegmenters();
     if (this.restartTimer) clearTimeout(this.restartTimer);
     this.restartTimer = null;
     const recognition = this.recognition;
@@ -230,6 +255,7 @@ export class SpeechRecognizer {
 
   async stop({ keepAudio = false } = {}) {
     this.shouldRun = false;
+    this.clearSegmenters();
     if (this.restartTimer) clearTimeout(this.restartTimer);
     this.restartTimer = null;
     this.restartAttempt = 0;
