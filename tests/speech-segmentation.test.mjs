@@ -30,11 +30,11 @@ function clock(t) {
   };
 }
 
-function segmentHarness(t, language = "ja-JP") {
+function segmentHarness(t, language = "ja-JP", preferNativeFinal = false) {
   const tick = clock(t);
   const segments = [];
   const interim = [];
-  const segmenter = new TranscriptSegmenter({ language, onSegment: c => segments.push(c), onInterim: c => interim.push(c) });
+  const segmenter = new TranscriptSegmenter({ language, preferNativeFinal, onSegment: c => segments.push(c), onInterim: c => interim.push(c) });
   t.after(() => segmenter.dispose());
   return { tick, segments, interim, update: (text, final = false) => segmenter.update({ text, sourceLanguage: language, confidence: 0.9 }, final) };
 }
@@ -251,6 +251,38 @@ test("Latin chunks retain whole words and the complete continuation", t => {
   assert.equal(segments.map(c => c.text).join(" "), text + " today");
 });
 
+test("native-final mode keeps the complete English interim until Chrome finalizes it", t => {
+  const { tick, segments, interim, update } = segmentHarness(t, "en-US", true);
+  const first = "We are going to explain the plan for today before we start the game";
+  const revised = `${first}, and then everyone can join us`;
+  update(first);
+  tick(10000);
+  assert.equal(segments.length, 0);
+  assert.equal(interim.at(-1).text, first);
+  update(revised);
+  assert.equal(segments.length, 0);
+  assert.equal(interim.at(-1).text, revised);
+  update(revised, true);
+  assert.equal(segments.length, 1);
+  assert.equal(segments[0].text, revised);
+  assert.equal(segments[0].isProvisional, false);
+});
+
+test("native-final mode only splits an overlong English interim at a sentence boundary", t => {
+  const { tick, segments, interim, update } = segmentHarness(t, "en-US", true);
+  const sentence = "We are explaining one complete part of the story before continuing. ";
+  const text = sentence.repeat(9) + "This ending is still being recognized";
+  assert.ok(text.replaceAll(" ", "").length > 480);
+  update(text);
+  tick(699);
+  assert.equal(segments.length, 0);
+  tick(1);
+  assert.equal(segments.length, 1);
+  assert.equal(segments[0].isProvisional, true);
+  assert.ok(segments[0].text.endsWith("."));
+  assert.equal(`${segments[0].text} ${interim.at(-1).text}`, text.trim());
+});
+
 test("repetition filtering runs before breaking a loop into smaller chunks", t => {
   const { tick, segments, update } = segmentHarness(t);
   update("あえんびえん".repeat(20));
@@ -281,7 +313,7 @@ test("recognition stays open at text boundaries; settings and stop clear stale t
   const segments = [];
   const recognizer = new SpeechRecognizer({ manageAudioOutput: false, stopStream: false, onFinal: c => segments.push(c) });
   t.after(() => recognizer.stop());
-  await recognizer.start(stream, { sourceLanguage: "ja-JP" });
+  await recognizer.start(stream, { sourceLanguage: "ja-JP", preferNativeFinal: false });
   started[0].result(japanese);
   tick(700);
   assert.equal(segments.length, 1);

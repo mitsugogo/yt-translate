@@ -142,6 +142,7 @@ export class SpeechRecognizer {
         if (!segmenter) {
           segmenter = new TranscriptSegmenter({
             language: candidate.sourceLanguage,
+            preferNativeFinal: this.settings.preferNativeFinal !== false,
             onSegment: (segment) => this.onFinal?.(segment),
             onInterim: (segment) => this.onInterim?.(segment)
           });

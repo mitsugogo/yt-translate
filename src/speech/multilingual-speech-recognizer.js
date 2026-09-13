@@ -7,6 +7,7 @@ import { getHololiveSpeechPhrases } from "./hololive-vocabulary.js";
 import { isUsableSpeechCandidate, meaningfulTextLength, speechConfidence } from "./transcript-quality.js";
 
 const FINAL_CANDIDATE_WAIT_MS = 700;
+const FINAL_LANGUAGE_SWITCH_GUARD_MS = 1600;
 const INTERIM_CANDIDATE_TTL_MS = 1600;
 const INTERIM_SWITCH_WAIT_MS = 600;
 const INTERIM_SWITCH_MARGIN = 0.2;
@@ -139,6 +140,10 @@ export class MultilingualSpeechRecognizer {
       await Promise.all(this.recognizers.map((recognizer, index) => recognizer.start(stream, {
         ...settings,
         sourceLanguage: languages[index],
+        // Keep the complete interim transcript in every mode. Translating
+        // time-based provisional prefixes removes the beginning from the live
+        // text and gives the translator a context-poor fragment.
+        preferNativeFinal: true,
         // Biasing every language toward the same dictionary distorts auto selection.
         phraseHints: settings.useHololiveVocabulary && settings.sourceLanguage !== "auto" ? getHololiveSpeechPhrases(languages[index]) : []
       })));
@@ -150,6 +155,12 @@ export class MultilingualSpeechRecognizer {
   }
 
   handleInterim(candidate) {
+    // A fixed language already has exactly one recognizer. Forward its results
+    // without auto-language scoring, competing hypotheses or display hysteresis.
+    if (this.settings.sourceLanguage !== "auto") {
+      if (isUsableSpeechCandidate(candidate)) this.onInterim?.(candidate);
+      return;
+    }
     const now = performance.now();
     const language = toModelLanguage(candidate.sourceLanguage);
     if (!isUsableSpeechCandidate(candidate)) {
@@ -199,6 +210,10 @@ export class MultilingualSpeechRecognizer {
   }
 
   handleFinal(candidate) {
+    if (this.settings.sourceLanguage !== "auto") {
+      if (isUsableSpeechCandidate(candidate)) this.onFinal?.(candidate);
+      return;
+    }
     const language = toModelLanguage(candidate.sourceLanguage);
     this.interimCandidates.delete(language);
     this.interimReceivedAt.delete(language);
@@ -229,9 +244,19 @@ export class MultilingualSpeechRecognizer {
     }
     const chosen = await selectSpeechCandidate([...byLanguage.values()], this.detector, this.settings.preferredLanguages, this.sessionLanguageLearner);
     if (chosen && generation === this.generation) {
+      const now = performance.now();
+      const displayedLanguage = toModelLanguage(this.displayedCandidate?.sourceLanguage || "");
+      const chosenLanguage = toModelLanguage(chosen.sourceLanguage);
+      // A parallel recognizer can finalize the same audio after the first
+      // language has already been displayed and translated. Do not treat that
+      // late rival as a new utterance unless its interim result first survived
+      // the normal language-switch hysteresis. A genuine sustained language
+      // change updates displayedCandidate before its native final arrives.
+      if (displayedLanguage && chosenLanguage !== displayedLanguage
+        && now - this.displayedAt < FINAL_LANGUAGE_SWITCH_GUARD_MS) return;
       if (this.settings.sourceLanguage === "auto") this.sessionLanguageLearner.observe(chosen);
       this.displayedCandidate = chosen;
-      this.displayedAt = performance.now();
+      this.displayedAt = now;
       this.pendingInterimSwitch = null;
       this.onFinal?.(chosen);
     }

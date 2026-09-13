@@ -161,9 +161,10 @@ test("a real language change after a pause is not held by an old confidence scor
   assert.deepEqual(interim, [japanese, english]);
 });
 
-test("native final language selection bypasses interim hysteresis and stopping resets display evidence", async t => {
-  const { recognizer, final } = interimHarness(t);
+test("native final language selection can switch after stale display evidence and stopping resets it", async t => {
+  const { recognizer, final, tick } = interimHarness(t);
   recognizer.handleInterim({ text: "日本語でお話をしています", sourceLanguage: "ja-JP", confidence: 1 });
+  tick(1600);
   const english = { text: "Thank you", sourceLanguage: "en-US", confidence: 0.95 };
   recognizer.finalCandidates.push(english);
   await recognizer.flushFinalCandidates();
@@ -173,6 +174,35 @@ test("native final language selection bypasses interim hysteresis and stopping r
   assert.equal(recognizer.displayedCandidate, null);
   assert.equal(recognizer.interimReceivedAt.size, 0);
   assert.equal(recognizer.pendingInterimSwitch, null);
+});
+
+test("a late competing native final cannot replace a recently selected language", async t => {
+  const { recognizer, final, tick } = interimHarness(t);
+  const english = { text: "Thank you for watching", sourceLanguage: "en-US", confidence: 0.9 };
+  recognizer.finalCandidates.push(english);
+  await recognizer.flushFinalCandidates();
+  tick(900);
+  recognizer.finalCandidates.push({ text: "見てくれてありがとう", sourceLanguage: "ja-JP", confidence: 1 });
+  await recognizer.flushFinalCandidates();
+  assert.deepEqual(final, [english]);
+  assert.equal(recognizer.displayedCandidate, english);
+  assert.equal(recognizer.sessionLanguageLearner.observations, 1);
+});
+
+test("a sustained interim language change still allows its native final", async t => {
+  const { recognizer, interim, final, tick } = interimHarness(t);
+  const english = { text: "We are speaking English now", sourceLanguage: "en-US", confidence: 0.9 };
+  recognizer.finalCandidates.push(english);
+  await recognizer.flushFinalCandidates();
+  const japanese = { text: "ここから日本語で話します", sourceLanguage: "ja-JP", confidence: 1 };
+  tick(100);
+  recognizer.handleInterim(japanese);
+  tick(600);
+  recognizer.handleInterim(japanese);
+  assert.deepEqual(interim, [japanese]);
+  recognizer.finalCandidates.push(japanese);
+  await recognizer.flushFinalCandidates();
+  assert.deepEqual(final, [english, japanese]);
 });
 
 test("discard a pending candidate selection when recognition is stopped", async () => {
@@ -200,7 +230,7 @@ function mockSpeechApi(t) {
     phrases = [];
     static async available() { return "available"; }
     start() { started.push(this); this.onstart?.(); }
-    abort() { this.onend?.(); }
+    abort() { this.aborted = true; this.onend?.(); }
   };
   globalThis.SpeechRecognitionPhrase = class {
     constructor(phrase, boost) { this.phrase = phrase; this.boost = boost; }
@@ -219,14 +249,54 @@ test("auto recognition disables all dictionary hints; fixed language uses gentle
   await recognizer.start(stream, { sourceLanguage: "auto", useHololiveVocabulary: true });
   assert.equal(started.length, 3);
   assert.ok(started.every(r => r.phrases.length === 0));
+  assert.ok(recognizer.recognizers.every(r => r.settings.preferNativeFinal === true));
   await recognizer.updateSettings({ sourceLanguage: "ja-JP", useHololiveVocabulary: true });
   assert.ok(started.at(-1).phrases.length > 0);
+  assert.equal(recognizer.recognizers.length, 1);
+  assert.equal(started.filter(r => !r.aborted).length, 1);
   assert.ok(started.at(-1).phrases.every(p => p.boost <= 1));
   await recognizer.updateSettings({ sourceLanguage: "auto", useHololiveVocabulary: true });
   assert.ok(started.slice(-3).every(r => r.phrases.length === 0));
+  assert.equal(started.filter(r => !r.aborted).length, 3);
   await recognizer.updateSettings({ sourceLanguage: "ja-JP", useHololiveVocabulary: false });
   assert.equal(started.at(-1).phrases.length, 0);
 });
+
+for (const sourceLanguage of ["ja-JP", "en-US", "id-ID"]) {
+  test(`fixed ${sourceLanguage} uses one recognizer and forwards results without auto selection`, async t => {
+    const { started, stream } = mockSpeechApi(t);
+    const interim = [];
+    const final = [];
+    const recognizer = new MultilingualSpeechRecognizer({
+      onInterim: c => interim.push(c),
+      onFinal: c => final.push(c),
+      detector: { detect() { assert.fail("Fixed speech must not run language detection for candidate selection"); } }
+    });
+    t.after(() => recognizer.stop());
+    await recognizer.start(stream, { sourceLanguage });
+    assert.equal(started.length, 1);
+    assert.equal(started[0].lang, sourceLanguage);
+    const child = recognizer.recognizers[0];
+    const partial = { text: "hello everyone", sourceLanguage, confidence: 0.9 };
+    const early = { ...partial, text: "first segment", isProvisional: true };
+    const native = { ...partial, text: "second segment", isProvisional: false };
+    child.onInterim(partial);
+    child.onFinal(early);
+    child.onFinal(native);
+    assert.deepEqual(interim, [partial]);
+    assert.deepEqual(final, [early, native]);
+    assert.equal(recognizer.finalTimer, null);
+    assert.equal(recognizer.interimTimer, null);
+    assert.equal(recognizer.finalCandidates.length, 0);
+    assert.equal(recognizer.interimCandidates.size, 0);
+    assert.equal(recognizer.sessionLanguageLearner.observations, 0);
+    const loop = { ...partial, text: "test ".repeat(20) };
+    child.onInterim(loop);
+    child.onFinal(loop);
+    assert.equal(interim.length, 1);
+    assert.equal(final.length, 2);
+  });
+}
 
 test("emits a final result index once while preserving genuine repeated utterances", async (t) => {
   const { started, stream } = mockSpeechApi(t);

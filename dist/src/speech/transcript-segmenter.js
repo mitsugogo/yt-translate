@@ -49,11 +49,49 @@ function revisedOffset(previous, text, offset, prefix) {
   return 0;
 }
 
+function longSpeechBoundary(pending, stableLength, japanese, words) {
+  const target = japanese ? 180 : 480;
+  const minimum = target / 2;
+  const limit = Math.min(stableLength, contentEnd(pending, target), contentEnd(pending, textLength(pending) - (japanese ? 8 : 20)));
+  const stable = pending.slice(0, limit);
+  // Prefer a sentence, then a clause near the length limit. A number's decimal
+  // point or separator is not a phrase boundary.
+  for (const pattern of [/[。！？.!?][」』”"')）]*/gu, /[、,;；:：]/gu]) {
+    let cut = 0;
+    for (const match of stable.matchAll(pattern)) {
+      const end = match.index + match[0].length;
+      if (textLength(stable.slice(0, end)) < minimum) continue;
+      if (/[.,:]/u.test(match[0]) && /\d/u.test(pending[match.index - 1] || "") && /\d/u.test(pending[end] || "")) continue;
+      if (!japanese && /[\p{L}\p{N}]/u.test(pending[end] || "")) continue;
+      cut = end;
+    }
+    if (cut) return cut;
+  }
+  let cut = 0;
+  for (const word of words.segment(pending)) {
+    const end = word.index + word.segment.length;
+    if (end > limit) break;
+    if (japanese) {
+      const prefix = pending.slice(0, end);
+      if (textLength(prefix) < minimum || !/(?:です|ます|でした|ました|ません|でしょう|ください|けれども|けど|ので|から|ですが|ますが|だよ|だね)(?:ね|よ)?$/u.test(prefix)) continue;
+      // Keep connected endings such as "ですけど" and "ますから" together.
+      if (/^(?:けど|けれど|が|ので|から|し|と|か)/u.test(pending.slice(end))) continue;
+      cut = end;
+    } else if (word.isWordLike && /^(?:and|but|because|while|although|however|dan|tetapi|karena|ketika|namun|sehingga)$/iu.test(word.segment)
+      && textLength(pending.slice(0, word.index)) >= minimum) {
+      cut = word.index;
+    }
+  }
+  // No arbitrary word-boundary fallback: wait for a suitable clause or native final.
+  return cut;
+}
+
 export class TranscriptSegmenter {
-  constructor({ language, onSegment, onInterim, now = () => performance.now() }) {
+  constructor({ language, onSegment, onInterim, preferNativeFinal = true, now = () => performance.now() }) {
     this.language = language;
     this.onSegment = onSegment;
     this.onInterim = onInterim;
+    this.preferNativeFinal = preferNativeFinal;
     this.now = now;
     this.text = "";
     this.offset = 0;
@@ -100,6 +138,10 @@ export class TranscriptSegmenter {
     while (stableEnd < this.text.length && now - this.stableSince[stableEnd] >= STABLE_MS) stableEnd += 1;
     const stable = this.text.slice(this.offset, stableEnd);
     let cut = 0;
+    const longTarget = japanese ? 180 : 480;
+    if (this.preferNativeFinal) {
+      if (pendingLength >= longTarget) cut = longSpeechBoundary(pending, stable.length, japanese, this.words);
+    } else {
     // Prefer a complete sentence, within the normal chunk length.
     for (const match of stable.slice(0, contentEnd(stable, target)).matchAll(/[。！？.!?][」』”"')）]*/gu)) {
       const end = match.index + match[0].length;
@@ -119,6 +161,7 @@ export class TranscriptSegmenter {
         if (textLength(pending.slice(0, end)) >= minimum) cut = end;
       }
     }
+    }
     if (cut > 0) {
       const text = this.text.slice(this.offset, this.offset + cut).trim();
       this.offset += cut;
@@ -128,8 +171,14 @@ export class TranscriptSegmenter {
     const remainder = this.text.slice(this.offset).trim();
     if (remainder) this.onInterim({ ...this.candidate, text: remainder });
     if (this.offset >= this.text.length) return;
+    if (this.preferNativeFinal && textLength(remainder) < longTarget) return;
+    if (this.preferNativeFinal && cut > 0) {
+      this.timer = setTimeout(() => this.drain(), 0);
+      return;
+    }
     const nextStable = this.stableSince.find((time, index) => index >= this.offset && time + STABLE_MS > now);
-    const deadlines = [nextStable === undefined ? Infinity : nextStable + STABLE_MS, this.changedAt + SETTLED_MS, this.startedAt + SEGMENT_MS].filter(time => time > now);
+    const deadlines = [nextStable === undefined ? Infinity : nextStable + STABLE_MS,
+      ...(this.preferNativeFinal ? [] : [this.changedAt + SETTLED_MS, this.startedAt + SEGMENT_MS])].filter(time => time > now);
     const next = Math.min(...deadlines);
     if (Number.isFinite(next)) this.timer = setTimeout(() => this.drain(), next - now);
   }
