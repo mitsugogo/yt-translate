@@ -1,5 +1,5 @@
 import { MessageType, TranslatorState } from "../shared/messages.js";
-import { DEFAULT_SETTINGS } from "../shared/settings.js";
+import { DEFAULT_SETTINGS, shouldTranslateSource } from "../shared/settings.js";
 import { getVideoId, findTranslationInsertionPoint } from "./youtube-dom.js";
 import { readYoutubePageContext } from "./channel-language.js";
 import { YoutubeNavigation } from "./youtube-navigation.js";
@@ -119,7 +119,12 @@ function handleRuntimeMessage(message, _sender, sendResponse) {
   }
   if ([MessageType.OFFSCREEN_STATE, MessageType.OFFSCREEN_TRANSCRIPT, MessageType.OFFSCREEN_TRANSLATION, MessageType.OFFSCREEN_ERROR].includes(message.type) && message.videoId && message.videoId !== currentVideoId) return;
   if (message.type === MessageType.OFFSCREEN_STATE) panel?.setState(message.state, message.detail, message.progress);
-  if (message.type === MessageType.OFFSCREEN_TRANSCRIPT) panel?.setTranscript(message.original, message.isFinal, message.id);
+  if (message.type === MessageType.OFFSCREEN_TRANSCRIPT) {
+    const willTranslate = typeof message.willTranslate === "boolean"
+      ? message.willTranslate
+      : !message.sourceLanguage || shouldTranslateSource(message.sourceLanguage, settings.targetLanguage);
+    panel?.setTranscript(message.original, message.isFinal, message.id, willTranslate);
+  }
   if (message.type === MessageType.OFFSCREEN_TRANSLATION) {
     panel?.setTranslationResult(message.original, message.translated, message.id, message.isFinal !== false);
   }

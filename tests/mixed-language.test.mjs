@@ -37,13 +37,20 @@ test("provides Hololive names and glossary phrases to local recognition", () => 
   const japanese = getHololiveSpeechPhrases("ja-JP");
   const english = getHololiveSpeechPhrases("en-US");
   assert.ok(japanese.some(({ phrase }) => phrase === "あえんびえん"));
+  assert.ok(japanese.some(({ phrase }) => phrase === "ギョリノフ"));
+  assert.ok(japanese.some(({ phrase }) => phrase === "みこち"));
+  assert.ok(japanese.some(({ phrase }) => phrase === "そら先輩"));
+  assert.ok(japanese.some(({ phrase }) => phrase === "ねねち"));
   assert.ok([...japanese, ...english].every(({ boost }) => boost > 0 && boost <= 1));
   assert.ok(japanese.some(({ phrase }) => phrase === "さくらみこ"));
   assert.ok(english.some(({ phrase }) => phrase === "Sakura Miko"));
+  assert.ok(english.some(({ phrase }) => phrase === "Biboo"));
+  assert.equal(new Set(japanese.map(({ phrase }) => phrase.toLocaleLowerCase("en-US"))).size, japanese.length);
 });
 
 test("uses exact Hololive glossary translations without calling the generic model", async () => {
   assert.equal(getExactHololiveTranslation("あえんびえん！", "en"), "aenbien (pandemonium)");
+  assert.equal(getExactHololiveTranslation("みこち", "en"), "Sakura Miko");
   assert.equal(getExactHololiveTranslation("宝鐘マリン", "en"), "Houshou Marine");
   const mixed = new MixedLanguageTranslator({
     translator: { async translate() { assert.fail("Exact glossary entry must bypass the generic translator"); }, reset() {} },

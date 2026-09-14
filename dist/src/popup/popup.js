@@ -6,6 +6,7 @@ const elements = {
   sourceLanguage: document.querySelector("#sourceLanguage"),
   autoLanguagePreference: document.querySelector("#autoLanguagePreference"),
   targetLanguage: document.querySelector("#targetLanguage"),
+  useHololiveDictionary: document.querySelector("#useHololiveDictionary"),
   showOriginal: document.querySelector("#showOriginal"),
   showTranslation: document.querySelector("#showTranslation"),
   fontSize: document.querySelector("#fontSize"),
@@ -55,6 +56,7 @@ function applySettings(next) {
   elements.sourceLanguage.value = settings.sourceLanguage;
   elements.autoLanguagePreference.value = settings.autoLanguagePreference;
   syncTargetOptions(settings.targetLanguage);
+  elements.useHololiveDictionary.checked = settings.useHololiveDictionary;
   elements.showOriginal.checked = settings.showOriginal;
   elements.showTranslation.checked = settings.showTranslation;
   elements.fontSize.value = String(settings.fontSize);
@@ -143,7 +145,7 @@ elements.enabled.addEventListener("change", async () => {
   elements.prepare.disabled = false;
 });
 
-for (const element of [elements.showOriginal, elements.showTranslation, elements.fontSize, elements.sourceLanguage, elements.autoLanguagePreference, elements.targetLanguage]) {
+for (const element of [elements.useHololiveDictionary, elements.showOriginal, elements.showTranslation, elements.fontSize, elements.sourceLanguage, elements.autoLanguagePreference, elements.targetLanguage]) {
   element.addEventListener("change", async () => {
     if (element === elements.sourceLanguage) syncTargetOptions();
     const preparesModels = settings.enabled && [elements.sourceLanguage, elements.autoLanguagePreference, elements.targetLanguage].includes(element);
@@ -159,7 +161,8 @@ for (const element of [elements.showOriginal, elements.showTranslation, elements
       fontSize: Number(elements.fontSize.value),
       sourceLanguage: elements.sourceLanguage.value,
       autoLanguagePreference: elements.autoLanguagePreference.value,
-      targetLanguage: elements.targetLanguage.value
+      targetLanguage: elements.targetLanguage.value,
+      useHololiveDictionary: elements.useHololiveDictionary.checked
     };
     const response = await send({ type: MessageType.SETTINGS_UPDATED, patch });
     if (response?.settings) applySettings(response.settings);

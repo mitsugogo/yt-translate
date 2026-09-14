@@ -5,11 +5,12 @@ import { fileURLToPath } from "node:url";
 import { bundleContent } from "../scripts/bundle-content.mjs";
 
 const defaultSettings = {
-  settingsVersion: 3,
+  settingsVersion: 4,
   enabled: false,
   sourceLanguage: "auto",
   autoLanguagePreference: "channel",
   targetLanguage: "ja",
+  useHololiveDictionary: false,
   showOriginal: true,
   showTranslation: true,
   fontSize: 15

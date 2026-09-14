@@ -36,7 +36,13 @@ function segmentHarness(t, language = "ja-JP", preferNativeFinal = false) {
   const interim = [];
   const segmenter = new TranscriptSegmenter({ language, preferNativeFinal, onSegment: c => segments.push(c), onInterim: c => interim.push(c) });
   t.after(() => segmenter.dispose());
-  return { tick, segments, interim, update: (text, final = false) => segmenter.update({ text, sourceLanguage: language, confidence: 0.9 }, final) };
+  return {
+    tick,
+    segments,
+    interim,
+    discardPending: () => segmenter.discardPending(),
+    update: (text, final = false) => segmenter.update({ text, sourceLanguage: language, confidence: 0.9 }, final)
+  };
 }
 
 test("stable Japanese retains every character through the native final", t => {
@@ -268,6 +274,69 @@ test("native-final mode keeps the complete English interim until Chrome finalize
   assert.equal(segments[0].isProvisional, false);
 });
 
+test("native-final mode translates a natural Japanese clause before a long transcript finishes", t => {
+  const { tick, segments, interim, update } = segmentHarness(t, "ja-JP", true);
+  const clause = "今日は新しいゲームの進め方と最初に集めておきたい素材について順番に説明しておきたいと思いますので";
+  const tail = "このあと実際の画面を見ながら一緒に確認していきましょうそのあとの予定についても詳しくお知らせしていきます";
+  const text = clause + tail;
+  assert.ok(text.length >= 60);
+  assert.ok(text.length < 180);
+  update(text);
+  tick(699);
+  assert.equal(segments.length, 0);
+  tick(1);
+  assert.equal(segments.length, 1);
+  assert.equal(segments[0].text, `${clause}。`);
+  assert.equal(segments[0].isProvisional, true);
+  assert.equal(interim.at(-1).text, tail);
+  update(text, true);
+  assert.equal(segments.at(-1).text, tail);
+  assert.equal(segments.at(-1).isProvisional, false);
+});
+
+test("native-final mode preserves recognized punctuation on an early segment", t => {
+  const { tick, segments, update } = segmentHarness(t, "ja-JP", true);
+  const sentence = "今日は新しいゲームの進め方と最初に集めておきたい素材について順番に説明します。";
+  update(sentence.repeat(2) + "このあと実際の画面を見ながら詳しく確認してからそのあとの予定についても順番にお知らせしていきましょうね");
+  tick(700);
+  assert.equal(segments[0].text, sentence.repeat(2));
+});
+
+test("discarding an inactive language keeps its old interim out of a later turn", t => {
+  const { segments, interim, discardPending, update } = segmentHarness(t, "ja-JP", true);
+  const previous = "そのまま引き続き綺麗にしろよという話をしていて";
+  const current = "今度は新しい日本語の話に戻ってきました";
+  update(previous);
+  discardPending();
+  update(previous + current);
+  assert.equal(interim.at(-1).text, current);
+  update(previous + current, true);
+  assert.deepEqual(segments.map(segment => segment.text), [current]);
+});
+
+test("native-final mode translates long unpunctuated English at a spoken clause boundary", t => {
+  const { tick, segments, interim, update } = segmentHarness(t, "en-US", true);
+  const clause = "I see I see I'm worried about the trip you'll have a lot of fun";
+  const tail = "and you know right now it's such a convenient world now that there are a lot of translating apps Google Maps helps a lot with telling you what train goes where";
+  const text = `${clause} ${tail}`;
+  assert.ok(text.length >= 120);
+  update(text);
+  tick(700);
+  assert.equal(segments[0].text, `${clause}.`);
+  assert.equal(interim.at(-1).text, tail);
+});
+
+test("native-final mode has a stable word-boundary fallback for speech without clause markers", t => {
+  const { tick, segments, interim, update } = segmentHarness(t, "en-US", true);
+  const text = Array.from({ length: 40 }, (_, index) => `topic${index}`).join(" ");
+  assert.ok(text.replaceAll(" ", "").length >= 180);
+  update(text);
+  tick(700);
+  assert.equal(segments.length, 1);
+  assert.ok(segments[0].text.endsWith("."));
+  assert.equal(`${segments[0].text.slice(0, -1)} ${interim.at(-1).text}`, text);
+});
+
 test("native-final mode only splits an overlong English interim at a sentence boundary", t => {
   const { tick, segments, interim, update } = segmentHarness(t, "en-US", true);
   const sentence = "We are explaining one complete part of the story before continuing. ";
@@ -277,10 +346,9 @@ test("native-final mode only splits an overlong English interim at a sentence bo
   tick(699);
   assert.equal(segments.length, 0);
   tick(1);
-  assert.equal(segments.length, 1);
-  assert.equal(segments[0].isProvisional, true);
-  assert.ok(segments[0].text.endsWith("."));
-  assert.equal(`${segments[0].text} ${interim.at(-1).text}`, text.trim());
+  assert.ok(segments.length > 1);
+  assert.ok(segments.every(segment => segment.isProvisional && segment.text.endsWith(".")));
+  assert.equal(`${segments.map(segment => segment.text).join(" ")} ${interim.at(-1).text}`, text.trim());
 });
 
 test("repetition filtering runs before breaking a loop into smaller chunks", t => {
@@ -349,8 +417,24 @@ test("candidate selection preserves consecutive chunks and never learns provisio
     { text: "次の区間の先頭です", sourceLanguage: "ja-JP", confidence: 0.9 }
   );
   await recognizer.flushFinalCandidates();
-  assert.equal(segments[0].text, "最初の区間です 次の区間の先頭です");
+  assert.deepEqual(segments.map(segment => segment.text), ["最初の区間です", "次の区間の先頭です"]);
   assert.equal(recognizer.sessionLanguageLearner.observations, 0);
   assert.equal(new SessionLanguageLearner().observe(segments[0]), false);
+  await recognizer.stop();
+});
+
+test("repeated language switches discard each previous language's pending transcript", async () => {
+  const discarded = [];
+  const recognizer = new MultilingualSpeechRecognizer();
+  recognizer.recognizers = ["en-US", "ja-JP", "id-ID"].map(sourceLanguage => ({
+    settings: { sourceLanguage },
+    discardPendingTranscript: () => discarded.push(sourceLanguage),
+    stop: async () => {}
+  }));
+  recognizer.adoptDisplayedCandidate({ sourceLanguage: "en-US" }, 1);
+  recognizer.adoptDisplayedCandidate({ sourceLanguage: "ja-JP" }, 2);
+  recognizer.adoptDisplayedCandidate({ sourceLanguage: "en-US" }, 3);
+  recognizer.adoptDisplayedCandidate({ sourceLanguage: "ja-JP" }, 4);
+  assert.deepEqual(discarded, ["en-US", "ja-JP", "en-US"]);
   await recognizer.stop();
 });

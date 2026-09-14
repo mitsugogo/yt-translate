@@ -1,9 +1,10 @@
 export const DEFAULT_SETTINGS = Object.freeze({
-  settingsVersion: 3,
+  settingsVersion: 4,
   enabled: false,
   sourceLanguage: "auto",
   autoLanguagePreference: "channel",
   targetLanguage: "ja",
+  useHololiveDictionary: false,
   showOriginal: true,
   showTranslation: true,
   fontSize: 15
@@ -45,11 +46,12 @@ export function normalizeSettings(value = {}) {
   const requestedTarget = TARGET_LANGUAGE_VALUES.has(value.targetLanguage) ? value.targetLanguage : DEFAULT_SETTINGS.targetLanguage;
   const targetLanguage = toModelLanguage(sourceLanguage) === requestedTarget ? getTargetLanguageForSource(sourceLanguage) : requestedTarget;
   return {
-    settingsVersion: 3,
+    settingsVersion: 4,
     enabled: value.enabled === true,
     sourceLanguage,
     autoLanguagePreference,
     targetLanguage,
+    useHololiveDictionary: value.useHololiveDictionary === true,
     showOriginal: value.showOriginal !== false,
     showTranslation: value.showTranslation !== false,
     fontSize: Number.isFinite(fontSize) ? Math.min(22, Math.max(12, Math.round(fontSize))) : DEFAULT_SETTINGS.fontSize
@@ -59,7 +61,7 @@ export function normalizeSettings(value = {}) {
 export async function readSettings() {
   const result = await chrome.storage.local.get(SETTINGS_KEY);
   const stored = result[SETTINGS_KEY];
-  const migrated = stored && stored.settingsVersion === 3 ? stored : { ...stored, autoLanguagePreference: "channel" };
+  const migrated = stored && stored.settingsVersion >= 3 ? stored : { ...stored, autoLanguagePreference: "channel" };
   return normalizeSettings(migrated);
 }
 

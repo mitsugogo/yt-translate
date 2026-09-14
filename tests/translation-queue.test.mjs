@@ -5,6 +5,8 @@ import { formatActiveTranslationStatus, formatLanguageDirection, normalizeSettin
 
 test("defaults auto recognition to the channel preference and supports manual override", () => {
   assert.equal(normalizeSettings({}).autoLanguagePreference, "channel");
+  assert.equal(normalizeSettings({}).useHololiveDictionary, false);
+  assert.equal(normalizeSettings({ useHololiveDictionary: true }).useHololiveDictionary, true);
   assert.equal(normalizeSettings({ autoLanguagePreference: "none" }).autoLanguagePreference, "none");
   assert.equal(resolveAutoLanguagePreference("channel", "en"), "en");
   assert.equal(resolveAutoLanguagePreference("ja", "en"), "ja");

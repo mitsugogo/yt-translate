@@ -3,6 +3,10 @@ import { isUsableSpeechCandidate } from "./transcript-quality.js";
 const STABLE_MS = 700;
 const SETTLED_MS = 1600;
 const SEGMENT_MS = 3500;
+const LONG_SPEECH_TARGET = {
+  japanese: 60,
+  other: 120
+};
 
 function textLength(text) {
   return [...text.replace(/\s/gu, "")].length;
@@ -50,9 +54,10 @@ function revisedOffset(previous, text, offset, prefix) {
 }
 
 function longSpeechBoundary(pending, stableLength, japanese, words) {
-  const target = japanese ? 180 : 480;
-  const minimum = target / 2;
-  const limit = Math.min(stableLength, contentEnd(pending, target), contentEnd(pending, textLength(pending) - (japanese ? 8 : 20)));
+  const target = japanese ? LONG_SPEECH_TARGET.japanese : LONG_SPEECH_TARGET.other;
+  const minimum = Math.round(target / 3);
+  const maximum = Math.round(target * 1.5);
+  const limit = Math.min(stableLength, contentEnd(pending, maximum), contentEnd(pending, textLength(pending) - (japanese ? 8 : 20)));
   const stable = pending.slice(0, limit);
   // Prefer a sentence, then a clause near the length limit. A number's decimal
   // point or separator is not a phrase boundary.
@@ -82,8 +87,23 @@ function longSpeechBoundary(pending, stableLength, japanese, words) {
       cut = word.index;
     }
   }
-  // No arbitrary word-boundary fallback: wait for a suitable clause or native final.
+  if (cut || textLength(pending) < maximum) return cut;
+
+  // SpeechRecognition often returns a long stream without punctuation. Once a
+  // phrase grows well beyond the target, use the last stable word boundary near
+  // the target so translation cannot remain blocked indefinitely.
+  const fallbackLimit = Math.min(limit, contentEnd(pending, target));
+  for (const word of words.segment(pending)) {
+    const end = word.index + word.segment.length;
+    if (end > fallbackLimit) break;
+    if (word.isWordLike && textLength(pending.slice(0, end)) >= minimum) cut = end;
+  }
   return cut;
+}
+
+function completeSegmentPunctuation(text, japanese) {
+  if (/[。！？.!?、,;；:：…][」』”"')）]*$/u.test(text)) return text;
+  return `${text}${japanese ? "。" : "."}`;
 }
 
 export class TranscriptSegmenter {
@@ -138,7 +158,7 @@ export class TranscriptSegmenter {
     while (stableEnd < this.text.length && now - this.stableSince[stableEnd] >= STABLE_MS) stableEnd += 1;
     const stable = this.text.slice(this.offset, stableEnd);
     let cut = 0;
-    const longTarget = japanese ? 180 : 480;
+    const longTarget = japanese ? LONG_SPEECH_TARGET.japanese : LONG_SPEECH_TARGET.other;
     if (this.preferNativeFinal) {
       if (pendingLength >= longTarget) cut = longSpeechBoundary(pending, stable.length, japanese, this.words);
     } else {
@@ -163,10 +183,16 @@ export class TranscriptSegmenter {
     }
     }
     if (cut > 0) {
-      const text = this.text.slice(this.offset, this.offset + cut).trim();
+      let text = this.text.slice(this.offset, this.offset + cut).trim();
       this.offset += cut;
       this.startedAt = now;
-      if (text) this.onSegment({ ...this.candidate, text, timestamp: now, isProvisional: true });
+      if (text) {
+        // A natural clause inferred from unpunctuated interim speech is a useful
+        // translation unit. Add a stop only to the emitted copy; offsets remain
+        // aligned to Chrome's raw transcript for a later native final.
+        if (this.preferNativeFinal) text = completeSegmentPunctuation(text, japanese);
+        this.onSegment({ ...this.candidate, text, timestamp: now, isProvisional: true });
+      }
     }
     const remainder = this.text.slice(this.offset).trim();
     if (remainder) this.onInterim({ ...this.candidate, text: remainder });
@@ -186,6 +212,16 @@ export class TranscriptSegmenter {
   clearTimer() {
     if (this.timer !== null) clearTimeout(this.timer);
     this.timer = null;
+  }
+
+  discardPending() {
+    this.clearTimer();
+    // A parallel recognizer can remain unfinished while another language is
+    // active. Keep Chrome recognition open, but do not replay that old prefix
+    // when this language becomes active again.
+    this.offset = this.text.length;
+    this.startedAt = null;
+    this.changedAt = null;
   }
 
   dispose() {

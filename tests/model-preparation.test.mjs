@@ -11,6 +11,9 @@ test("popup omits the local-processing copy", async () => {
     readFile(new URL("../src/popup/popup.js", import.meta.url), "utf8")
   ]);
   assert.doesNotMatch(`${html}\n${script}`, /端末内で処理/);
+  assert.match(html, /id="useHololiveDictionary"/);
+  assert.match(html, /ホロライブ辞書を使用/);
+  assert.match(script, /useHololiveDictionary/);
 });
 
 test("prepares local speech with the same default quality used by recognition", async () => {

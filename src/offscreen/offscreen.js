@@ -119,7 +119,7 @@ async function startSession(message) {
   current.queue = new TranslationQueue({
     translator: {
       translate: (text, item) => current.translator.translate(text, item.sourceLanguage, current.settings.targetLanguage, {
-        useHololiveVocabulary: current.pageContext.isHololive === true
+        useHololiveVocabulary: current.settings.useHololiveDictionary
       })
     },
     onResult: ({ id, text, translated, timestamp, sourceLanguage, isProvisional }) => {
@@ -147,7 +147,7 @@ async function startSession(message) {
 
   reportState(TranslatorState.INITIALIZING);
   try {
-    await current.recognizer.start(stream, { ...settings, preferredLanguages, useHololiveVocabulary: pageContext.isHololive === true });
+    await current.recognizer.start(stream, { ...settings, preferredLanguages });
     await current.translator.prepare(settings.sourceLanguage, settings.targetLanguage);
   } catch (error) {
     await stopSession();
@@ -166,7 +166,7 @@ async function updateSettings(message) {
     : [];
   const speechChanged = next.sourceLanguage !== session.settings.sourceLanguage
     || preferredLanguages.join(",") !== session.preferredLanguages.join(",")
-    || (pageContext.isHololive === true) !== (session.pageContext?.isHololive === true);
+    || next.useHololiveDictionary !== session.settings.useHololiveDictionary;
   const translationChanged = next.sourceLanguage !== session.settings.sourceLanguage
     || next.targetLanguage !== session.settings.targetLanguage;
   session.settings = next;
@@ -178,7 +178,7 @@ async function updateSettings(message) {
     session.translator.reset();
     session.queue.clear();
   }
-  if (speechChanged) await session.recognizer.updateSettings({ ...next, preferredLanguages, useHololiveVocabulary: pageContext.isHololive === true });
+  if (speechChanged) await session.recognizer.updateSettings({ ...next, preferredLanguages });
   if (translationChanged) await session.translator.prepare(next.sourceLanguage, next.targetLanguage);
   reportState(TranslatorState.LISTENING);
   return { ok: true };

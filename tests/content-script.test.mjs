@@ -99,9 +99,9 @@ test("classic content bundle mounts the panel before metadata and accepts transl
   assert.equal(fields.get('[data-role="translation"]').textContent, "こんにちは");
   receive({ type: "transcript:result", videoId: "example", id: "ja-1", original: "こんばんは", sourceLanguage: "ja-JP", isFinal: true, willTranslate: false });
   assert.equal(fields.get('[data-role="original"]').textContent, "こんばんは");
-  assert.equal(fields.get('[data-role="translation"]').textContent, "こんにちは");
+  assert.equal(fields.get('[data-role="translation"]').textContent, "");
   receive({ type: "translation:result", videoId: "example", id: "en-1", original: "Hello", translated: "遅れて届いた翻訳" });
-  assert.equal(fields.get('[data-role="translation"]').textContent, "こんにちは");
+  assert.equal(fields.get('[data-role="translation"]').textContent, "");
   receive({ type: "session:state", videoId: "example", state: "downloading", detail: "言語判定モデル 100%", progress: 1 });
   assert.equal(fields.get('[data-role="progress"]').hidden, true);
   assert.equal(fields.get('[data-role="detail"]').hidden, true);
@@ -149,6 +149,24 @@ test("completed translation remains visible throughout subsequent interim and se
   assert.equal(fields.get('[data-role="translation"]').textContent, "最初の文章です");
   receive({ type: "translation:result", videoId: "example", id: "chunk-2", original: "The second sentence", translated: "次の文章です" });
   assert.equal(fields.get('[data-role="translation"]').textContent, "次の文章です");
+});
+
+test("Japanese interim clears an English translation and rejects its delayed result", async () => {
+  const { receive, fields } = await createContentHarness();
+  receive({ type: "transcript:result", videoId: "example", id: "en-1", original: "Please keep it clean", sourceLanguage: "en-US", isFinal: true });
+  receive({ type: "translation:result", videoId: "example", id: "en-1", original: "Please keep it clean", translated: "綺麗に使ってください" });
+  assert.equal(fields.get('[data-role="translation"]').textContent, "綺麗に使ってください");
+
+  receive({ type: "transcript:result", videoId: "example", id: "interim", original: "そのまま引き続き綺麗にしろよ", sourceLanguage: "ja-JP", isFinal: false });
+  assert.equal(fields.get('[data-role="original"]').textContent, "そのまま引き続き綺麗にしろよ");
+  assert.equal(fields.get('[data-role="translation"]').textContent, "");
+
+  receive({ type: "translation:result", videoId: "example", id: "en-1", original: "Please keep it clean", translated: "遅れて戻った古い翻訳" });
+  assert.equal(fields.get('[data-role="translation"]').textContent, "");
+
+  receive({ type: "transcript:result", videoId: "example", id: "en-2", original: "Thank you", sourceLanguage: "en-US", isFinal: true });
+  receive({ type: "translation:result", videoId: "example", id: "en-2", original: "Thank you", translated: "ありがとう" });
+  assert.equal(fields.get('[data-role="translation"]').textContent, "ありがとう");
 });
 
 test("a translation that finishes after the original advances is displayed without rewinding the original", async () => {

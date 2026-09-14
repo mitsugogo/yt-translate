@@ -137,13 +137,24 @@ export class TranslationPanel {
     this.setProgress(state === TranslatorState.DOWNLOADING, progress, detail);
   }
 
-  setTranscript(text, isFinal, id = null) {
+  setTranscript(text, isFinal, id = null, willTranslate = true) {
     if (!this.root) return;
     if (id) this.currentTranscriptId = id;
     if (id && id !== "interim") this.registerTranslation(id);
     this.root.querySelector('[data-role="original"]').textContent = text || "";
     this.root.querySelector('[data-role="original"]').dataset.final = String(Boolean(isFinal));
+    if (!willTranslate) this.clearTranslation();
     this.renderEmptyState();
+  }
+
+  clearTranslation() {
+    if (!this.root) return;
+    // Matching source/target speech has no replacement translation coming.
+    // Invalidate earlier in-flight results so an old language cannot reappear.
+    this.translationOrder.clear();
+    this.displayedTranslationOrder = this.nextTranslationOrder;
+    this.currentTranslationId = null;
+    this.root.querySelector('[data-role="translation"]').textContent = "";
   }
 
   setTranslation(text, id = null) {

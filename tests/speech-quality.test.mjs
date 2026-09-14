@@ -242,23 +242,25 @@ function mockSpeechApi(t) {
   return { started, stream: { getAudioTracks: () => [{ readyState: "live" }], getTracks: () => [] } };
 }
 
-test("auto recognition disables all dictionary hints; fixed language uses gentle Hololive hints only", async (t) => {
+test("the Popup dictionary opt-in controls hints for auto and fixed recognition", async (t) => {
   const { started, stream } = mockSpeechApi(t);
   const recognizer = new MultilingualSpeechRecognizer();
   t.after(() => recognizer.stop());
-  await recognizer.start(stream, { sourceLanguage: "auto", useHololiveVocabulary: true });
+  await recognizer.start(stream, { sourceLanguage: "auto", useHololiveDictionary: true });
   assert.equal(started.length, 3);
-  assert.ok(started.every(r => r.phrases.length === 0));
+  assert.ok(started.every(r => r.phrases.length > 0));
+  assert.ok(started.find(r => r.lang === "ja-JP").phrases.some(p => p.phrase === "ギョリノフ"));
+  assert.ok(started.find(r => r.lang === "en-US").phrases.some(p => p.phrase === "Biboo"));
   assert.ok(recognizer.recognizers.every(r => r.settings.preferNativeFinal === true));
-  await recognizer.updateSettings({ sourceLanguage: "ja-JP", useHololiveVocabulary: true });
+  await recognizer.updateSettings({ sourceLanguage: "ja-JP", useHololiveDictionary: true });
   assert.ok(started.at(-1).phrases.length > 0);
   assert.equal(recognizer.recognizers.length, 1);
   assert.equal(started.filter(r => !r.aborted).length, 1);
   assert.ok(started.at(-1).phrases.every(p => p.boost <= 1));
-  await recognizer.updateSettings({ sourceLanguage: "auto", useHololiveVocabulary: true });
+  await recognizer.updateSettings({ sourceLanguage: "auto", useHololiveDictionary: false });
   assert.ok(started.slice(-3).every(r => r.phrases.length === 0));
   assert.equal(started.filter(r => !r.aborted).length, 3);
-  await recognizer.updateSettings({ sourceLanguage: "ja-JP", useHololiveVocabulary: false });
+  await recognizer.updateSettings({ sourceLanguage: "ja-JP", useHololiveDictionary: false });
   assert.equal(started.at(-1).phrases.length, 0);
 });
 

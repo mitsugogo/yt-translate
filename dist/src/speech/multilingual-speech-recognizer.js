@@ -144,8 +144,9 @@ export class MultilingualSpeechRecognizer {
         // time-based provisional prefixes removes the beginning from the live
         // text and gives the translator a context-poor fragment.
         preferNativeFinal: true,
-        // Biasing every language toward the same dictionary distorts auto selection.
-        phraseHints: settings.useHololiveVocabulary && settings.sourceLanguage !== "auto" ? getHololiveSpeechPhrases(languages[index]) : []
+        // This is an explicit Popup opt-in. Each recognizer receives only the
+        // phrases written for its own model language.
+        phraseHints: settings.useHololiveDictionary ? getHololiveSpeechPhrases(languages[index]) : []
       })));
       this.onState?.(TranslatorState.LISTENING);
     } catch (error) {
@@ -204,9 +205,22 @@ export class MultilingualSpeechRecognizer {
     }
     // An event from a losing recognizer must not replay a stored old hypothesis.
     if (chosen !== candidate) return;
-    this.displayedCandidate = chosen;
-    this.displayedAt = now;
+    this.adoptDisplayedCandidate(chosen, now);
     this.onInterim?.(chosen);
+  }
+
+  adoptDisplayedCandidate(candidate, now = performance.now()) {
+    const previousLanguage = toModelLanguage(this.displayedCandidate?.sourceLanguage || "");
+    const nextLanguage = toModelLanguage(candidate?.sourceLanguage || "");
+    if (previousLanguage && nextLanguage && previousLanguage !== nextLanguage) {
+      const previousRecognizer = this.recognizers.find(recognizer => toModelLanguage(recognizer.settings?.sourceLanguage || "") === previousLanguage);
+      previousRecognizer?.discardPendingTranscript();
+      this.interimCandidates.delete(previousLanguage);
+      this.interimReceivedAt.delete(previousLanguage);
+    }
+    this.displayedCandidate = candidate;
+    this.displayedAt = now;
+    this.pendingInterimSwitch = null;
   }
 
   handleFinal(candidate) {
@@ -231,18 +245,21 @@ export class MultilingualSpeechRecognizer {
     const candidates = this.finalCandidates.splice(0);
     this.finalTimer = null;
     // Consecutive chunks from the same language are not competing alternatives.
-    // Preserve all of them when several arrive within the candidate wait window.
-    const byLanguage = new Map();
+    // Combine them only for language selection, then forward each original
+    // chunk separately so the translation queue keeps the natural boundaries.
+    const chunksByLanguage = new Map();
     for (const candidate of candidates) {
-      const previous = byLanguage.get(candidate.sourceLanguage);
-      byLanguage.set(candidate.sourceLanguage, previous ? {
-        ...candidate,
-        text: `${previous.text} ${candidate.text}`,
-        confidence: Math.min(previous.confidence, candidate.confidence),
-        isProvisional: previous.isProvisional || candidate.isProvisional
-      } : candidate);
+      const chunks = chunksByLanguage.get(candidate.sourceLanguage) || [];
+      chunks.push(candidate);
+      chunksByLanguage.set(candidate.sourceLanguage, chunks);
     }
-    const chosen = await selectSpeechCandidate([...byLanguage.values()], this.detector, this.settings.preferredLanguages, this.sessionLanguageLearner);
+    const representatives = [...chunksByLanguage.values()].map((chunks) => chunks.length === 1 ? chunks[0] : {
+      ...chunks.at(-1),
+      text: chunks.map(candidate => candidate.text).join(" "),
+      confidence: Math.min(...chunks.map(candidate => candidate.confidence)),
+      isProvisional: chunks.some(candidate => candidate.isProvisional)
+    });
+    const chosen = await selectSpeechCandidate(representatives, this.detector, this.settings.preferredLanguages, this.sessionLanguageLearner);
     if (chosen && generation === this.generation) {
       const now = performance.now();
       const displayedLanguage = toModelLanguage(this.displayedCandidate?.sourceLanguage || "");
@@ -255,17 +272,15 @@ export class MultilingualSpeechRecognizer {
       if (displayedLanguage && chosenLanguage !== displayedLanguage
         && now - this.displayedAt < FINAL_LANGUAGE_SWITCH_GUARD_MS) return;
       if (this.settings.sourceLanguage === "auto") this.sessionLanguageLearner.observe(chosen);
-      this.displayedCandidate = chosen;
-      this.displayedAt = now;
-      this.pendingInterimSwitch = null;
-      this.onFinal?.(chosen);
+      this.adoptDisplayedCandidate(chosen, now);
+      for (const chunk of chunksByLanguage.get(chosen.sourceLanguage) || [chosen]) this.onFinal?.(chunk);
     }
   }
 
   async updateSettings(settings) {
     const sourceChanged = settings.sourceLanguage !== this.settings.sourceLanguage
       || (settings.preferredLanguages || []).join(",") !== (this.settings.preferredLanguages || []).join(",")
-      || settings.useHololiveVocabulary !== this.settings.useHololiveVocabulary;
+      || settings.useHololiveDictionary !== this.settings.useHololiveDictionary;
     this.settings = settings;
     if (!sourceChanged || !this.stream) return;
     const stream = this.stream;

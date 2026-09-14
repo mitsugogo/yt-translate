@@ -215,6 +215,10 @@ export class SpeechRecognizer {
     this.segmenters.clear();
   }
 
+  discardPendingTranscript() {
+    for (const segmenter of this.segmenters.values()) segmenter.discardPending();
+  }
+
   scheduleRestart() {
     if (this.restartTimer || !this.shouldRun) return;
     const delay = RESTART_DELAYS[Math.min(this.restartAttempt, RESTART_DELAYS.length - 1)];
