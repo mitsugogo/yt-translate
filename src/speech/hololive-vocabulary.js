@@ -14,7 +14,12 @@ const MEMBERS = [
     ["すいちゃん", "すいせい先輩"],
     ["Suisei"],
   ],
-  ["AZKi", "AZKi", ["あずきちゃん", "あずちゃん", "あずきち", "AZKi先輩"], []],
+  [
+    "AZKi",
+    "AZKi",
+    ["あずきちゃん", "あずちゃん", "あずきち", "AZKi先輩", "あずき"],
+    [],
+  ],
   ["夜空メル", "Yozora Mel", ["メルちゃん", "メルメル", "メル先輩"], ["Mel"]],
   [
     "アキ・ローゼンタール",
@@ -220,6 +225,12 @@ const MEMBERS = [
     ["ヴィヴィ", "ヴィヴィちゃん", "ヴィヴィたん"],
     ["Vivi"],
   ],
+
+  ["百灯キョーコ", "Hyakuto Kyoko", [], []],
+  ["熱千めら", "Achichi Mela", [], []],
+  ["鈴鳴つづり", "Suzuna Tsuzuri", [], []],
+  ["宙科そぴあ", "Sorashina Sopia", [], []],
+
   ["井月みちる", "Izuki Michiru", ["みちるちゃん"], ["Michiru"]],
   ["花園さやか", "Hanazono Sayaka", ["さやかちゃん"], ["Sayaka"]],
   ["風白ゆき", "Kazeshiro Yuki", ["ゆきちゃん"], ["Yuki"]],
@@ -349,6 +360,7 @@ const JAPANESE_TERMS = [
   "ホロックス",
   "リグロス",
   "フロウグロウ",
+  "フログロ",
   "フワモコ",
   "ホロぐら",
   "ホロジュール",
@@ -361,6 +373,10 @@ const JAPANESE_TERMS = [
   "スバおか",
   "やごー",
   "谷郷",
+  "だぶちーず",
+  "だぶち",
+  "ぷにち",
+  "いぬち",
 ];
 
 const LATIN_TERMS = [
@@ -377,6 +393,10 @@ const LATIN_TERMS = [
   "HoloGTA",
   "HoloEarth",
   "YAGOO",
+  "Dabuchīzu",
+  "Dabuchi",
+  "Punichi",
+  "Inuchi",
 ];
 
 const EXACT_GLOSSARY = [
