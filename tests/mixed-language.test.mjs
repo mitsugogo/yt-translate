@@ -48,12 +48,12 @@ test("provides Hololive names and glossary phrases to local recognition", () => 
     assert.ok(japanese.some(({ phrase }) => phrase === callName), `${callName} should be a Japanese speech hint`);
   }
   assert.ok([...japanese, ...english].every(({ boost }) => boost > 0 && boost <= 10));
-  assert.equal(japanese.find(({ phrase }) => phrase === "さくらみこ")?.boost, 3);
-  assert.equal(japanese.find(({ phrase }) => phrase === "みこち")?.boost, 2);
-  assert.equal(japanese.find(({ phrase }) => phrase === "ギョリノフ")?.boost, 4);
-  assert.equal(english.find(({ phrase }) => phrase === "Sakura Miko")?.boost, 3);
-  assert.equal(english.find(({ phrase }) => phrase === "Biboo")?.boost, 2);
-  assert.equal(english.find(({ phrase }) => phrase === "YAGOO")?.boost, 4);
+  assert.equal(japanese.find(({ phrase }) => phrase === "さくらみこ")?.boost, 4);
+  assert.equal(japanese.find(({ phrase }) => phrase === "みこち")?.boost, 3);
+  assert.equal(japanese.find(({ phrase }) => phrase === "ギョリノフ")?.boost, 5);
+  assert.equal(english.find(({ phrase }) => phrase === "Sakura Miko")?.boost, 4);
+  assert.equal(english.find(({ phrase }) => phrase === "Biboo")?.boost, 3);
+  assert.equal(english.find(({ phrase }) => phrase === "YAGOO")?.boost, 5);
   assert.equal(new Set(japanese.map(({ phrase }) => phrase.toLocaleLowerCase("en-US"))).size, japanese.length);
 });
 
