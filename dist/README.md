@@ -71,6 +71,10 @@ npm run zip
 
 `npm run check` はManifestの参照先と全JavaScriptの構文を検査します。実際のChromeでの音声・モデル・YouTube DOMの動作は、Chromeの環境とユーザー操作を必要とするため、別途確認してください。
 
+## リリース
+
+GitHubで `vMAJOR.MINOR.PATCH` 形式のタグを付けたReleaseを公開すると、Actionsがタグのバージョンを `package.json` と `manifest.json` に反映し、テスト・検査・zip生成を実行して、生成したChrome拡張機能zipをReleaseへ添付します。
+
 ## Privacy
 
 Audio is processed locally on your device.
