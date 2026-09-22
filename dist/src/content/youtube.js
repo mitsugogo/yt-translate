@@ -343,11 +343,13 @@ function getHololiveSpeechPhrases(language) {
   const officialNames = MEMBERS.map(([ja, en]) => isJapanese ? ja : en);
   const callNames = MEMBERS.flatMap(([, , jaAliases, latinAliases]) => isJapanese ? jaAliases : latinAliases);
   const terms = isJapanese ? JAPANESE_TERMS : LATIN_TERMS;
-  // Chromeのboostは対数的に効くため、固有語でも1以下の弱いヒントに留める。
+  // Chromeのboostは「通常より何倍あり得るか」の自然対数に近い尺度。
+  // 0.8〜1.0では体感できる差が出にくいため、一般的な呼称は控えめに、
+  // 正式名と固有性の高い用語は公式例と同程度まで段階的に強める。
   return uniquePhrases([
-    ...phraseEntries(officialNames, 0.9),
-    ...phraseEntries(callNames, 0.8),
-    ...phraseEntries(terms, 1)
+    ...phraseEntries(officialNames, 3),
+    ...phraseEntries(callNames, 2),
+    ...phraseEntries(terms, 4)
   ]);
 }
 

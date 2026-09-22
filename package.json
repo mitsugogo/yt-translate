@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
+    "zip": "node scripts/zip.mjs",
     "check": "node scripts/check.mjs",
     "test": "node tests/run.mjs"
   }

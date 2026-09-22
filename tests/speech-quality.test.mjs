@@ -256,7 +256,8 @@ test("the Popup dictionary opt-in controls hints for auto and fixed recognition"
   assert.ok(started.at(-1).phrases.length > 0);
   assert.equal(recognizer.recognizers.length, 1);
   assert.equal(started.filter(r => !r.aborted).length, 1);
-  assert.ok(started.at(-1).phrases.every(p => p.boost <= 1));
+  assert.ok(started.at(-1).phrases.every(p => p.boost > 0 && p.boost <= 10));
+  assert.ok(started.at(-1).phrases.some(p => p.boost > 1));
   await recognizer.updateSettings({ sourceLanguage: "auto", useHololiveDictionary: false });
   assert.ok(started.slice(-3).every(r => r.phrases.length === 0));
   assert.equal(started.filter(r => !r.aborted).length, 3);
