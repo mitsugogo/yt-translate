@@ -43,10 +43,22 @@ test("provides Hololive names and glossary phrases to local recognition", () => 
     "こより", "こよちゃん", "ラプラス", "ルイルイ", "ルイ"
   ];
   assert.ok(japanese.some(({ phrase }) => phrase === "あえんびえん"));
+  for (const term of ["他校調査", "一塁", "トリラン"]) {
+    assert.ok(japanese.some(({ phrase }) => phrase === term), `${term} should be a Japanese speech hint`);
+  }
   assert.ok(japanese.some(({ phrase }) => phrase === "ギョリノフ"));
   assert.ok(japanese.some(({ phrase }) => phrase === "ホロドリ"));
   assert.ok(english.some(({ phrase }) => phrase === "Holodori"));
   assert.ok(japanese.some(({ phrase }) => phrase === "そら先輩"));
+  for (const reading of ["こせきびじゅー", "コセキ・ビジュー", "ほしまちすいせい", "なきりあやめ", "じゅうふうていらでん"]) {
+    assert.ok(japanese.some(({ phrase }) => phrase === reading), `${reading} should be a Japanese pronunciation hint`);
+  }
+  for (const phrase of ["白上", "白上ふぶき", "しらかみ", "しらかみふぶき", "シラカミフブキ"]) {
+    assert.ok(japanese.some((hint) => hint.phrase === phrase), `${phrase} should help recognize 白上フブキ`);
+  }
+  assert.equal(japanese.find(({ phrase }) => phrase === "白上フブキ")?.boost, 6);
+  assert.ok(!japanese.some(({ phrase }) => phrase === "白髪"));
+  assert.equal(getExactHololiveTranslation("こせきびじゅー", "en"), null);
   for (const callName of requestedCallNames) {
     assert.ok(japanese.some(({ phrase }) => phrase === callName), `${callName} should be a Japanese speech hint`);
   }
@@ -60,6 +72,33 @@ test("provides Hololive names and glossary phrases to local recognition", () => 
     assert.equal(phrases.find(({ phrase }) => phrase === "YAGOO")?.boost, 3);
   }
   assert.equal(new Set(japanese.map(({ phrase }) => phrase.toLocaleLowerCase("en-US"))).size, japanese.length);
+});
+
+test("boosts the channel owner's names and self-reference without leaking them to other channels", () => {
+  const mio = getHololiveSpeechPhrases("ja-JP", "大神ミオ");
+  const fubuki = getHololiveSpeechPhrases("ja-JP", "白上フブキ");
+  const otherLanguage = getHololiveSpeechPhrases("en-US", "大神ミオ");
+  assert.equal(mio.find(({ phrase }) => phrase === "大神ミオ")?.boost, 6);
+  assert.equal(mio.find(({ phrase }) => phrase === "ミオしゃ")?.boost, 6);
+  assert.equal(mio.find(({ phrase }) => phrase === "おおかみみお")?.boost, 6);
+  assert.equal(mio.find(({ phrase }) => phrase === "ウチ")?.boost, 6);
+  assert.equal(mio.find(({ phrase }) => phrase === "うち")?.boost, 6);
+  assert.equal(mio.find(({ phrase }) => phrase === "白上フブキ")?.boost, 6);
+  assert.equal(mio.find(({ phrase }) => phrase === "フブさん")?.boost, 3);
+  assert.ok(!fubuki.some(({ phrase }) => phrase === "ウチ"));
+  assert.ok(!getHololiveSpeechPhrases("ja-JP").some(({ phrase }) => phrase === "ウチ"));
+  assert.ok(!otherLanguage.some(({ phrase }) => phrase === "ウチ"));
+  assert.equal(otherLanguage.find(({ phrase }) => phrase === "Ookami Mio")?.boost, 4);
+  for (const [member, phrase] of [
+    ["百鬼あやめ", "余"], ["湊あくあ", "あてぃし"],
+    ["ラプラス・ダークネス", "吾輩"], ["博衣こより", "こよ"],
+    ["儒烏風亭らでん", "JFT"], ["轟はじめ", "それがし"]
+  ]) {
+    assert.equal(getHololiveSpeechPhrases("ja-JP", member).find(hint => hint.phrase === phrase)?.boost, 6);
+    assert.ok(!getHololiveSpeechPhrases("ja-JP").some(hint => hint.phrase === phrase));
+  }
+  assert.equal(getHololiveSpeechPhrases("en-US", "小鳥遊キアラ").find(hint => hint.phrase === "Kiwawa")?.boost, 4);
+  assert.ok(!getHololiveSpeechPhrases("en-US").some(hint => hint.phrase === "Kiwawa"));
 });
 
 test("uses exact Hololive glossary translations without calling the generic model", async () => {

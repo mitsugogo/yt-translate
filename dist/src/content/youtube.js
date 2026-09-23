@@ -263,7 +263,7 @@ const MEMBERS = [
   [
     "白上フブキ",
     "Shirakami Fubuki",
-    ["フブさん", "フブキ", "フブちゃん", "フブキちゃん", "フブキ先輩"],
+    ["白上", "フブさん", "フブキ", "フブちゃん", "フブキちゃん", "フブキ先輩"],
     ["Fubuki"],
   ],
   [
@@ -578,6 +578,10 @@ const MEMBERS = [
 ];
 
 const JAPANESE_TERMS = [
+  // ホロライブ甲子園／パワプロ配信で使われる野球・育成用語
+  "他校調査",
+  "一塁",
+  "トリラン",
   "あえんびえん",
   "ギョリノフ",
   "ホロライブ",
@@ -606,7 +610,129 @@ const JAPANESE_TERMS = [
   "いぬち",
 ];
 
+// 漢字・英字表記だけでは読みが伝わりにくい名前は、読み仮名も認識候補にする。
+// これは音声認識用ヒントであり、翻訳辞書の別名には含めない。
+const JAPANESE_NAME_READINGS = {
+  "ロボ子さん": ["ろぼこさん"],
+  "さくらみこ": ["さくらみこ"],
+  "星街すいせい": ["ほしまちすいせい"],
+  "AZKi": ["あずき"],
+  "アキ・ローゼンタール": ["あきろーぜんたーる"],
+  "赤井はあと": ["あかいはあと"],
+  "白上フブキ": ["しらかみふぶき", "しらかみ", "白上ふぶき", "シラカミフブキ"],
+  "湊あくあ": ["みなとあくあ"],
+  "紫咲シオン": ["むらさきしおん"],
+  "百鬼あやめ": ["なきりあやめ"],
+  "癒月ちょこ": ["ゆづきちょこ"],
+  "大空スバル": ["おおぞらすばる"],
+  "大神ミオ": ["おおかみみお"],
+  "猫又おかゆ": ["ねこまたおかゆ"],
+  "戌神ころね": ["いぬがみころね"],
+  "兎田ぺこら": ["うさだぺこら"],
+  "不知火フレア": ["しらぬいふれあ"],
+  "白銀ノエル": ["しろがねのえる"],
+  "宝鐘マリン": ["ほうしょうまりん"],
+  "天音かなた": ["あまねかなた"],
+  "桐生ココ": ["きりゅうここ"],
+  "角巻わため": ["つのまきわため"],
+  "常闇トワ": ["とこやみとわ"],
+  "姫森ルーナ": ["ひめもりるーな"],
+  "雪花ラミィ": ["ゆきはならみぃ"],
+  "桃鈴ねね": ["ももすずねね"],
+  "獅白ぼたん": ["ししろぼたん"],
+  "尾丸ポルカ": ["おまるぽるか"],
+  "ラプラス・ダークネス": ["らぷらすだーくねす"],
+  "鷹嶺ルイ": ["たかねるい"],
+  "博衣こより": ["はくいこより"],
+  "沙花叉クロヱ": ["さかまたくろえ"],
+  "風真いろは": ["かざまいろは"],
+  "火威青": ["ひおどしあお"],
+  "音乃瀬奏": ["おとのせかなで"],
+  "一条莉々華": ["いちじょうりりか"],
+  "儒烏風亭らでん": ["じゅうふうていらでん"],
+  "轟はじめ": ["とどろきはじめ"],
+  "響咲リオナ": ["いさきりおな"],
+  "虎金妃笑虎": ["こがねいにこ"],
+  "水宮枢": ["みずみやすう"],
+  "輪堂千速": ["りんどうちはや"],
+  "綺々羅々ヴィヴィ": ["ききららゔぃゔぃ"],
+  "古石ビジュー": ["こせきびじゅー", "コセキ・ビジュー"],
+  "一伊那尓栖": ["にのまえいなにす"],
+  "九十九佐命": ["つくもさな"],
+  "七詩ムメイ": ["ななしむめい"],
+};
+
+// 呼称一覧の「相手＝本人」行（呼び方／一人称）から、発話される特徴的な形を採用。
+// 「私」「俺」など一般的な一人称や、文章表記のみ・限定的な用法は強調しない。
+// ほかのチャンネルでは一般語になり得るため、本人の配信だけに渡す。
+const CHANNEL_SELF_REFERENCES = {
+  "ときのそら": ["そらち"],
+  "さくらみこ": ["みこ"],
+  "星街すいせい": ["すいせい"],
+  "AZKi": ["あずきちさん"],
+  "夜空メル": ["メル"],
+  "アキ・ローゼンタール": ["ムキロゼ"],
+  "赤井はあと": ["はあちゃま"],
+  "白上フブキ": ["白上"],
+  "夏色まつり": ["まつり"],
+  "湊あくあ": ["あてぃし"],
+  "紫咲シオン": ["シオン"],
+  "百鬼あやめ": ["余"],
+  "癒月ちょこ": ["ちょこ", "癒月"],
+  "大空スバル": ["スバル"],
+  "大神ミオ": ["うち", "ウチ"],
+  "戌神ころね": ["ころね", "こーね", "こぉね"],
+  "兎田ぺこら": ["ぺこーら", "ぺっちゃん"],
+  "不知火フレア": ["フレア"],
+  "白銀ノエル": ["団長", "だんちょ", "うち"],
+  "宝鐘マリン": ["船長", "マリン"],
+  "天音かなた": ["かなたそ"],
+  "角巻わため": ["わため", "わためぇ"],
+  "常闇トワ": ["トワ", "トワしゃま"],
+  "姫森ルーナ": ["ルーナ", "るなたん"],
+  "雪花ラミィ": ["ラミィ", "らみ"],
+  "桃鈴ねね": ["ねね", "ねねち", "うち", "あてぃし", "ぼきゅ", "わて", "わてくし"],
+  "獅白ぼたん": ["ししろん"],
+  "尾丸ポルカ": ["ポルカ", "ぽっか", "わい", "わし"],
+  "ラプラス・ダークネス": ["吾輩"],
+  "鷹嶺ルイ": ["わし"],
+  "博衣こより": ["こよ", "こんこよ"],
+  "沙花叉クロヱ": ["沙花叉"],
+  "風真いろは": ["かざま", "ござる"],
+  "アイラニ・イオフィフティーン": ["よっぴー"],
+  "こぼ・かなえる": ["こぼ"],
+  "森カリオペ": ["森"],
+  "小鳥遊キアラ": ["ウチ"],
+  "古石ビジュー": ["ビジュー"],
+  "音乃瀬奏": ["奏"],
+  "一条莉々華": ["莉々華"],
+  "儒烏風亭らでん": ["らでん", "JFT"],
+  "轟はじめ": ["うち", "はじめ", "某", "それがし"],
+  "響咲リオナ": ["あたい", "リオナ"],
+  "虎金妃笑虎": ["ニコたん", "笑虎"],
+  "水宮枢": ["枢", "すうちゃん", "水宮"],
+  "輪堂千速": ["千速", "ちは"],
+  "綺々羅々ヴィヴィ": ["うち", "ヴィヴィ", "ヴィヴィたん"],
+};
+
+const LATIN_SELF_REFERENCES = {
+  "アイラニ・イオフィフティーン": ["Yopi"],
+  "小鳥遊キアラ": ["Kiwawa"],
+  "七詩ムメイ": ["Mumei"],
+};
+
+function findHololiveChannelMember(channelIdentity = "") {
+  const channel = String(channelIdentity).toLocaleLowerCase("en-US");
+  const matches = MEMBERS.filter(([ja, en]) =>
+    channel.includes(ja.toLocaleLowerCase("en-US")) || channel.includes(en.toLocaleLowerCase("en-US")),
+  );
+  return matches.length === 1 ? matches[0][0] : null;
+}
+
 const LATIN_TERMS = [
+  "scouting other schools",
+  "first base",
+  "Toriran",
   "aenbien",
   "hololive",
   "holomem",
@@ -658,7 +784,7 @@ function uniquePhrases(entries) {
   });
 }
 
-function getHololiveSpeechPhrases(language) {
+function getHololiveSpeechPhrases(language, channelMember = null) {
   const modelLanguage = String(language).split("-")[0].toLowerCase();
   const isJapanese = modelLanguage === "ja";
   const boosts = isJapanese
@@ -668,13 +794,26 @@ function getHololiveSpeechPhrases(language) {
   const callNames = MEMBERS.flatMap(([, , jaAliases, latinAliases]) =>
     isJapanese ? jaAliases : latinAliases,
   );
+  const nameReadings = isJapanese
+    ? MEMBERS.flatMap(([ja]) => JAPANESE_NAME_READINGS[ja] || [])
+    : [];
   const terms = isJapanese ? JAPANESE_TERMS : LATIN_TERMS;
+  const member = MEMBERS.find(([ja]) => ja === channelMember);
+  const channelPhrases = member
+    ? (isJapanese
+      ? [member[0], ...member[2], ...(JAPANESE_NAME_READINGS[member[0]] || []), ...(CHANNEL_SELF_REFERENCES[member[0]] || [])]
+      : [member[1], ...member[3], ...(LATIN_SELF_REFERENCES[member[0]] || [])])
+    : [];
   // Chromeのboostは「通常より何倍あり得るか」の自然対数に近い尺度。
   // 日本語は固有名の認識を優先し、英語・インドネシア語では一般語と衝突しやすい
   // Latin文字の候補を控えめにする。
   return uniquePhrases([
-    ...phraseEntries(officialNames, boosts.officialNames),
+    ...phraseEntries(channelPhrases, isJapanese ? 6 : 4),
+    ...phraseEntries(officialNames, boosts.officialNames).map((entry) =>
+      isJapanese && entry.phrase === "白上フブキ" ? { ...entry, boost: 6 } : entry,
+    ),
     ...phraseEntries(callNames, boosts.callNames),
+    ...phraseEntries(nameReadings, boosts.callNames),
     ...phraseEntries(terms, boosts.terms),
   ]);
 }
@@ -703,7 +842,7 @@ function getExactHololiveTranslation(text, targetLanguage) {
   return entry[target] || entry.en;
 }
 
-return { HOLOLIVE_DICTIONARY_SOURCE, getHololiveSpeechPhrases, isKnownHololiveMember, getExactHololiveTranslation };
+return { HOLOLIVE_DICTIONARY_SOURCE, findHololiveChannelMember, getHololiveSpeechPhrases, isKnownHololiveMember, getExactHololiveTranslation };
 })();
 modules[4] = (() => {
 const ENGLISH_BRANCH_MEMBERS = [
@@ -776,10 +915,11 @@ function readYoutubePageContext(doc = document) {
   return {
     channelLanguagePriority,
     channelLanguageHint: channelLanguagePriority[0] || null,
+    channelMember: findHololiveChannelMember(channelIdentity),
     isHololive: isKnownHololiveMember(channelIdentity) || matchesAny(`${channelIdentity}\n${videoIdentity}`, HOLOLIVE_CONTEXT_PATTERNS)
   };
 }
-const { isKnownHololiveMember } = modules[5];
+const { findHololiveChannelMember, isKnownHololiveMember } = modules[5];
 return { detectChannelLanguagePriority, detectChannelLanguageHint, readYoutubePageContext };
 })();
 modules[6] = (() => {

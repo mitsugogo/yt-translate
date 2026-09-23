@@ -68,7 +68,8 @@ export function readYoutubePageContext(doc = document) {
   return {
     channelLanguagePriority,
     channelLanguageHint: channelLanguagePriority[0] || null,
+    channelMember: findHololiveChannelMember(channelIdentity),
     isHololive: isKnownHololiveMember(channelIdentity) || matchesAny(`${channelIdentity}\n${videoIdentity}`, HOLOLIVE_CONTEXT_PATTERNS)
   };
 }
-import { isKnownHololiveMember } from "../speech/hololive-vocabulary.js";
+import { findHololiveChannelMember, isKnownHololiveMember } from "../speech/hololive-vocabulary.js";

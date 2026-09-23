@@ -258,6 +258,10 @@ test("the Popup dictionary opt-in controls hints for auto and fixed recognition"
   assert.equal(started.filter(r => !r.aborted).length, 1);
   assert.ok(started.at(-1).phrases.every(p => p.boost > 0 && p.boost <= 10));
   assert.ok(started.at(-1).phrases.some(p => p.boost > 1));
+  await recognizer.updateSettings({ sourceLanguage: "ja-JP", useHololiveDictionary: true, channelMember: "大神ミオ" });
+  assert.equal(started.at(-1).phrases.find(p => p.phrase === "ウチ")?.boost, 6);
+  await recognizer.updateSettings({ sourceLanguage: "ja-JP", useHololiveDictionary: true, channelMember: "白上フブキ" });
+  assert.ok(!started.at(-1).phrases.some(p => p.phrase === "ウチ"));
   await recognizer.updateSettings({ sourceLanguage: "auto", useHololiveDictionary: false });
   assert.ok(started.slice(-3).every(r => r.phrases.length === 0));
   assert.equal(started.filter(r => !r.aborted).length, 3);

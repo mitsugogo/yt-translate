@@ -146,7 +146,7 @@ export class MultilingualSpeechRecognizer {
         preferNativeFinal: true,
         // This is an explicit Popup opt-in. Each recognizer receives only the
         // phrases written for its own model language.
-        phraseHints: settings.useHololiveDictionary ? getHololiveSpeechPhrases(languages[index]) : []
+        phraseHints: settings.useHololiveDictionary ? getHololiveSpeechPhrases(languages[index], settings.channelMember) : []
       })));
       this.onState?.(TranslatorState.LISTENING);
     } catch (error) {
@@ -280,7 +280,8 @@ export class MultilingualSpeechRecognizer {
   async updateSettings(settings) {
     const sourceChanged = settings.sourceLanguage !== this.settings.sourceLanguage
       || (settings.preferredLanguages || []).join(",") !== (this.settings.preferredLanguages || []).join(",")
-      || settings.useHololiveDictionary !== this.settings.useHololiveDictionary;
+      || settings.useHololiveDictionary !== this.settings.useHololiveDictionary
+      || settings.channelMember !== this.settings.channelMember;
     this.settings = settings;
     if (!sourceChanged || !this.stream) return;
     const stream = this.stream;

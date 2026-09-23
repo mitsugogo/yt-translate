@@ -147,7 +147,7 @@ async function startSession(message) {
 
   reportState(TranslatorState.INITIALIZING);
   try {
-    await current.recognizer.start(stream, { ...settings, preferredLanguages });
+    await current.recognizer.start(stream, { ...settings, preferredLanguages, channelMember: pageContext.channelMember });
     await current.translator.prepare(settings.sourceLanguage, settings.targetLanguage);
   } catch (error) {
     await stopSession();
@@ -166,7 +166,8 @@ async function updateSettings(message) {
     : [];
   const speechChanged = next.sourceLanguage !== session.settings.sourceLanguage
     || preferredLanguages.join(",") !== session.preferredLanguages.join(",")
-    || next.useHololiveDictionary !== session.settings.useHololiveDictionary;
+    || next.useHololiveDictionary !== session.settings.useHololiveDictionary
+    || pageContext.channelMember !== session.pageContext.channelMember;
   const translationChanged = next.sourceLanguage !== session.settings.sourceLanguage
     || next.targetLanguage !== session.settings.targetLanguage;
   session.settings = next;
@@ -178,7 +179,7 @@ async function updateSettings(message) {
     session.translator.reset();
     session.queue.clear();
   }
-  if (speechChanged) await session.recognizer.updateSettings({ ...next, preferredLanguages });
+  if (speechChanged) await session.recognizer.updateSettings({ ...next, preferredLanguages, channelMember: pageContext.channelMember });
   if (translationChanged) await session.translator.prepare(next.sourceLanguage, next.targetLanguage);
   reportState(TranslatorState.LISTENING);
   return { ok: true };
