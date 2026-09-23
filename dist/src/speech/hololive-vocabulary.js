@@ -431,18 +431,21 @@ function uniquePhrases(entries) {
 export function getHololiveSpeechPhrases(language) {
   const modelLanguage = String(language).split("-")[0].toLowerCase();
   const isJapanese = modelLanguage === "ja";
+  const boosts = isJapanese
+    ? { officialNames: 4, callNames: 3, terms: 5 }
+    : { officialNames: 2, callNames: 1, terms: 3 };
   const officialNames = MEMBERS.map(([ja, en]) => (isJapanese ? ja : en));
   const callNames = MEMBERS.flatMap(([, , jaAliases, latinAliases]) =>
     isJapanese ? jaAliases : latinAliases,
   );
   const terms = isJapanese ? JAPANESE_TERMS : LATIN_TERMS;
   // Chromeのboostは「通常より何倍あり得るか」の自然対数に近い尺度。
-  // 0.8〜1.0では体感できる差が出にくいため、一般的な呼称は控えめに、
-  // 正式名と固有性の高い用語は公式例と同程度まで段階的に強める。
+  // 日本語は固有名の認識を優先し、英語・インドネシア語では一般語と衝突しやすい
+  // Latin文字の候補を控えめにする。
   return uniquePhrases([
-    ...phraseEntries(officialNames, 4),
-    ...phraseEntries(callNames, 3),
-    ...phraseEntries(terms, 5),
+    ...phraseEntries(officialNames, boosts.officialNames),
+    ...phraseEntries(callNames, boosts.callNames),
+    ...phraseEntries(terms, boosts.terms),
   ]);
 }
 

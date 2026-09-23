@@ -59,7 +59,10 @@ const SOURCE_LANGUAGE_OPTIONS = Object.freeze([
 const TARGET_LANGUAGE_OPTIONS = Object.freeze([
   Object.freeze({ value: "en", label: "English" }),
   Object.freeze({ value: "ja", label: "Japanese" }),
-  Object.freeze({ value: "id", label: "Bahasa Indonesia" })
+  Object.freeze({ value: "id", label: "Bahasa Indonesia" }),
+  Object.freeze({ value: "ko", label: "한국어" }),
+  Object.freeze({ value: "zh-Hant", label: "中文（繁体）" }),
+  Object.freeze({ value: "zh-Hans", label: "中文（简体）" })
 ]);
 
 const AUTO_SPEECH_LANGUAGES = Object.freeze(["ja-JP", "en-US", "id-ID"]);
@@ -112,6 +115,7 @@ async function writeSettings(patch) {
 
 function toModelLanguage(language) {
   if (language === "auto") return "auto";
+  if (/^zh-(?:hans|hant)$/i.test(language)) return language.toLowerCase().replace("zh-", "zh-").replace(/hans/i, "Hans").replace(/hant/i, "Hant");
   return language.split("-")[0].toLowerCase();
 }
 
@@ -141,7 +145,7 @@ function resolveAutoLanguagePriority(preference, channelLanguagePriority = null,
 function getLanguageLabel(language) {
   const modelLanguage = toModelLanguage(language);
   if (modelLanguage === "auto") return "JA / EN / ID";
-  return modelLanguage === "en" ? "EN" : modelLanguage === "ja" ? "JA" : modelLanguage.toUpperCase();
+  return modelLanguage === "en" ? "EN" : modelLanguage === "ja" ? "JA" : modelLanguage === "zh-Hant" ? "ZH-TW" : modelLanguage === "zh-Hans" ? "ZH-CN" : modelLanguage.toUpperCase();
 }
 
 function formatLanguageDirection(sourceLanguage, targetLanguage) {
@@ -154,6 +158,9 @@ function getJapaneseLanguageLabel(language, fallback = "判定中") {
   if (modelLanguage === "ja") return "日本語";
   if (modelLanguage === "en") return "英語";
   if (modelLanguage === "id") return "インドネシア語";
+  if (modelLanguage === "ko") return "韓国語";
+  if (modelLanguage === "zh-Hant") return "中国語（繁体字）";
+  if (modelLanguage === "zh-Hans") return "中国語（簡体字）";
   return fallback;
 }
 
@@ -651,18 +658,21 @@ function uniquePhrases(entries) {
 function getHololiveSpeechPhrases(language) {
   const modelLanguage = String(language).split("-")[0].toLowerCase();
   const isJapanese = modelLanguage === "ja";
+  const boosts = isJapanese
+    ? { officialNames: 4, callNames: 3, terms: 5 }
+    : { officialNames: 2, callNames: 1, terms: 3 };
   const officialNames = MEMBERS.map(([ja, en]) => (isJapanese ? ja : en));
   const callNames = MEMBERS.flatMap(([, , jaAliases, latinAliases]) =>
     isJapanese ? jaAliases : latinAliases,
   );
   const terms = isJapanese ? JAPANESE_TERMS : LATIN_TERMS;
   // Chromeのboostは「通常より何倍あり得るか」の自然対数に近い尺度。
-  // 0.8〜1.0では体感できる差が出にくいため、一般的な呼称は控えめに、
-  // 正式名と固有性の高い用語は公式例と同程度まで段階的に強める。
+  // 日本語は固有名の認識を優先し、英語・インドネシア語では一般語と衝突しやすい
+  // Latin文字の候補を控えめにする。
   return uniquePhrases([
-    ...phraseEntries(officialNames, 4),
-    ...phraseEntries(callNames, 3),
-    ...phraseEntries(terms, 5),
+    ...phraseEntries(officialNames, boosts.officialNames),
+    ...phraseEntries(callNames, boosts.callNames),
+    ...phraseEntries(terms, boosts.terms),
   ]);
 }
 

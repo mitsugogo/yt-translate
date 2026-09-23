@@ -36,6 +36,7 @@ test("translates each mixed-language run into the selected target", async () => 
 test("provides Hololive names and glossary phrases to local recognition", () => {
   const japanese = getHololiveSpeechPhrases("ja-JP");
   const english = getHololiveSpeechPhrases("en-US");
+  const indonesian = getHololiveSpeechPhrases("id-ID");
   const requestedCallNames = [
     "ぺこら", "あずきち", "マリン", "カエラ神", "みこち", "ころさん", "ころね",
     "ミオしゃ", "フブさん", "フブキ", "ラミィ", "ねね", "ねねち", "ぼたん",
@@ -51,9 +52,11 @@ test("provides Hololive names and glossary phrases to local recognition", () => 
   assert.equal(japanese.find(({ phrase }) => phrase === "さくらみこ")?.boost, 4);
   assert.equal(japanese.find(({ phrase }) => phrase === "みこち")?.boost, 3);
   assert.equal(japanese.find(({ phrase }) => phrase === "ギョリノフ")?.boost, 5);
-  assert.equal(english.find(({ phrase }) => phrase === "Sakura Miko")?.boost, 4);
-  assert.equal(english.find(({ phrase }) => phrase === "Biboo")?.boost, 3);
-  assert.equal(english.find(({ phrase }) => phrase === "YAGOO")?.boost, 5);
+  for (const phrases of [english, indonesian]) {
+    assert.equal(phrases.find(({ phrase }) => phrase === "Sakura Miko")?.boost, 2);
+    assert.equal(phrases.find(({ phrase }) => phrase === "Biboo")?.boost, 1);
+    assert.equal(phrases.find(({ phrase }) => phrase === "YAGOO")?.boost, 3);
+  }
   assert.equal(new Set(japanese.map(({ phrase }) => phrase.toLocaleLowerCase("en-US"))).size, japanese.length);
 });
 

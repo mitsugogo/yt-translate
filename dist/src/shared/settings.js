@@ -20,7 +20,10 @@ export const SOURCE_LANGUAGE_OPTIONS = Object.freeze([
 export const TARGET_LANGUAGE_OPTIONS = Object.freeze([
   Object.freeze({ value: "en", label: "English" }),
   Object.freeze({ value: "ja", label: "Japanese" }),
-  Object.freeze({ value: "id", label: "Bahasa Indonesia" })
+  Object.freeze({ value: "id", label: "Bahasa Indonesia" }),
+  Object.freeze({ value: "ko", label: "한국어" }),
+  Object.freeze({ value: "zh-Hant", label: "中文（繁体）" }),
+  Object.freeze({ value: "zh-Hans", label: "中文（简体）" })
 ]);
 
 export const AUTO_SPEECH_LANGUAGES = Object.freeze(["ja-JP", "en-US", "id-ID"]);
@@ -73,6 +76,7 @@ export async function writeSettings(patch) {
 
 export function toModelLanguage(language) {
   if (language === "auto") return "auto";
+  if (/^zh-(?:hans|hant)$/i.test(language)) return language.toLowerCase().replace("zh-", "zh-").replace(/hans/i, "Hans").replace(/hant/i, "Hant");
   return language.split("-")[0].toLowerCase();
 }
 
@@ -102,7 +106,7 @@ export function resolveAutoLanguagePriority(preference, channelLanguagePriority 
 export function getLanguageLabel(language) {
   const modelLanguage = toModelLanguage(language);
   if (modelLanguage === "auto") return "JA / EN / ID";
-  return modelLanguage === "en" ? "EN" : modelLanguage === "ja" ? "JA" : modelLanguage.toUpperCase();
+  return modelLanguage === "en" ? "EN" : modelLanguage === "ja" ? "JA" : modelLanguage === "zh-Hant" ? "ZH-TW" : modelLanguage === "zh-Hans" ? "ZH-CN" : modelLanguage.toUpperCase();
 }
 
 export function formatLanguageDirection(sourceLanguage, targetLanguage) {
@@ -115,6 +119,9 @@ export function getJapaneseLanguageLabel(language, fallback = "判定中") {
   if (modelLanguage === "ja") return "日本語";
   if (modelLanguage === "en") return "英語";
   if (modelLanguage === "id") return "インドネシア語";
+  if (modelLanguage === "ko") return "韓国語";
+  if (modelLanguage === "zh-Hant") return "中国語（繁体字）";
+  if (modelLanguage === "zh-Hans") return "中国語（簡体字）";
   return fallback;
 }
 
