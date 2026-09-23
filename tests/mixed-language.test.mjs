@@ -44,6 +44,8 @@ test("provides Hololive names and glossary phrases to local recognition", () => 
   ];
   assert.ok(japanese.some(({ phrase }) => phrase === "あえんびえん"));
   assert.ok(japanese.some(({ phrase }) => phrase === "ギョリノフ"));
+  assert.ok(japanese.some(({ phrase }) => phrase === "ホロドリ"));
+  assert.ok(english.some(({ phrase }) => phrase === "Holodori"));
   assert.ok(japanese.some(({ phrase }) => phrase === "そら先輩"));
   for (const callName of requestedCallNames) {
     assert.ok(japanese.some(({ phrase }) => phrase === callName), `${callName} should be a Japanese speech hint`);
