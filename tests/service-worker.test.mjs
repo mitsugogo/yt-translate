@@ -148,3 +148,57 @@ test("a late URL update does not stop the session already started for that URL",
   assert.equal(harness.offscreenMessages.filter((message) => message.type === "session:offscreen-stop").length, 0);
   assert.equal(harness.activeSession.videoId, "live-video");
 });
+
+test("chat frames receive the active session target and route translations through offscreen", async () => {
+  const h = await createServiceWorkerHarness();
+  const sender = { tab: { id: 17 }, frameId: 2, url: "https://www.youtube.com/live_chat?v=live-video" };
+  assert.equal((await h.dispatch({ type: "chat:ready" }, sender)).settings.enabled, false);
+  await h.dispatch({ type: "settings:set-enabled", enabled: true });
+  const ready = await h.dispatch({ type: "chat:ready" }, sender);
+  assert.equal(ready.settings.enabled, true);
+  assert.equal(ready.settings.targetLanguage, "ja");
+  await h.dispatch({ type: "chat:translate", text: "Hello", authorId: "author", targetLanguage: "ja" }, sender);
+  const forwarded = h.offscreenMessages.find(message => message.type === "chat:translate");
+  assert.equal(forwarded.tabId, 17);
+  assert.equal(forwarded.videoId, "live-video");
+  assert.equal(forwarded.text, "Hello");
+  assert.equal(forwarded.targetLanguage, "ja");
+});
+
+test("chat translation ignores other tabs, stale videos and stale targets", async () => {
+  const h = await createServiceWorkerHarness();
+  await h.dispatch({ type: "settings:set-enabled", enabled: true });
+  const senders = [
+    { tab: { id: 18 }, url: "https://www.youtube.com/live_chat?v=live-video" },
+    { tab: { id: 17 }, url: "https://www.youtube.com/live_chat?v=old-video" },
+    { tab: { id: 17 }, url: "https://example.com/live_chat?v=live-video" }
+  ];
+  for (const sender of senders) {
+    assert.equal((await h.dispatch({ type: "chat:translate", text: "Hello", targetLanguage: "ja" }, sender)).status, "skipped");
+  }
+  assert.equal((await h.dispatch({ type: "chat:translate", text: "Hello", targetLanguage: "ko" }, { tab: { id: 17 }, url: "https://www.youtube.com/live_chat?v=live-video" })).status, "skipped");
+  assert.equal(h.offscreenMessages.some(message => message.type === "chat:translate"), false);
+  await h.dispatch({ type: "settings:set-enabled", enabled: false });
+  assert.equal((await h.dispatch({ type: "chat:ready" }, { tab: { id: 17 }, url: "https://www.youtube.com/live_chat?v=live-video" })).settings.enabled, false);
+  assert.ok(h.tabMessages.some(({ message }) => message.type === "session:offscreen-settings" && message.settings.enabled === false));
+});
+
+test("chat preference is saved and blocks chat work while leaving the audio session active", async () => {
+  const h = await createServiceWorkerHarness();
+  const sender = { tab: { id: 17 }, url: "https://www.youtube.com/live_chat?v=live-video" };
+  await h.dispatch({ type: "settings:set-enabled", enabled: true });
+  assert.equal((await h.dispatch({ type: "settings:get" })).settings.translateChat, true);
+  await h.dispatch({ type: "settings:updated", patch: { translateChat: false } });
+  assert.equal((await h.dispatch({ type: "settings:get" })).settings.translateChat, false);
+  const ready = await h.dispatch({ type: "chat:ready" }, sender);
+  assert.equal(ready.settings.enabled, true);
+  assert.equal(ready.settings.translateChat, false);
+  assert.equal((await h.dispatch({ type: "chat:translate", text: "Hello", targetLanguage: "ja" }, sender)).status, "skipped");
+  assert.equal(h.offscreenMessages.some(message => message.type === "chat:translate"), false);
+  assert.equal(h.activeSession.videoId, "live-video");
+  await h.dispatch({ type: "settings:updated", patch: { translateChat: true } });
+  await h.dispatch({ type: "chat:translate", text: "Hello", targetLanguage: "ja" }, sender);
+  assert.equal(h.offscreenMessages.some(message => message.type === "chat:translate"), true);
+  assert.equal(h.captureRequests, 1);
+  assert.equal(h.offscreenMessages.some(message => message.type === "session:offscreen-stop"), false);
+});

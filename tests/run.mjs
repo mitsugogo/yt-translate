@@ -6,3 +6,6 @@ import "./mixed-language.test.mjs";
 import "./speech-quality.test.mjs";
 import "./speech-segmentation.test.mjs";
 import "./translation-queue.test.mjs";
+import "./chat-translator.test.mjs";
+import "./chat-content.test.mjs";
+import "./chat-offscreen.test.mjs";

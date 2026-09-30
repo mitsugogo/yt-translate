@@ -111,6 +111,7 @@ async function stopForTab(tabId, videoId) {
   if (!currentSessionForTab(tabId, videoId)) return { ok: true };
   await sendToOffscreen({ type: MessageType.OFFSCREEN_STOP });
   await saveSession(null);
+  await sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: { ...(await readSettings()), enabled: false } });
   await sendToTab(tabId, { type: MessageType.OFFSCREEN_STATE, state: TranslatorState.IDLE, videoId });
   return { ok: true };
 }
@@ -204,6 +205,26 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.target === "offscreen") return false;
   (async () => {
     const settings = await readSettings();
+    if (message.type === MessageType.CHAT_READY || message.type === MessageType.CHAT_TRANSLATE) {
+      await loadSession();
+      const tabId = sender.tab?.id;
+      const chatUrl = sender.url || "";
+      const isChatFrame = /^https:\/\/(?:www\.)?youtube\.com\/live_chat(?:_replay)?(?:[/?]|$)/.test(chatUrl);
+      const videoId = isChatFrame ? new URL(chatUrl).searchParams.get("v") : null;
+      const enabled = Boolean(isChatFrame && settings.enabled && currentSessionForTab(tabId, videoId));
+      if (message.type === MessageType.CHAT_READY) {
+        sendResponse({ ok: true, settings: { ...settings, enabled } });
+      } else if (!enabled || !settings.translateChat || typeof message.text !== "string" || message.text.length > 500 || message.targetLanguage !== settings.targetLanguage) {
+        sendResponse({ status: "skipped" });
+      } else {
+        sendResponse(await sendToOffscreen({
+          type: MessageType.CHAT_TRANSLATE, tabId, videoId: activeSession.videoId,
+          text: message.text, authorId: typeof message.authorId === "string" ? message.authorId.slice(0, 128) : "",
+          targetLanguage: settings.targetLanguage
+        }));
+      }
+      return;
+    }
     if (message.type === MessageType.CONTENT_READY) {
       const tabId = sender.tab?.id;
       const videoId = message.videoId || getVideoId(sender.tab?.url || "");
@@ -249,6 +270,9 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const updateResult = await runSessionOperation(async () => {
         await loadSession();
         if (activeSession) {
+          // Invalidate chat results immediately, before speech model preparation
+          // finishes, so a changed target cannot display an old translation.
+          await sendToTab(activeSession.tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: updated });
           if (settings.sourceLanguage !== updated.sourceLanguage && "detectedLanguage" in activeSession) {
             const nextSession = { ...activeSession };
             delete nextSession.detectedLanguage;
@@ -347,7 +371,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const forwarded = { ...message };
         delete forwarded.tabId;
         await sendToTab(activeSession.tabId, forwarded);
-        if (message.type === MessageType.OFFSCREEN_STATE && (message.state === TranslatorState.ERROR || message.state === TranslatorState.IDLE)) await saveSession(null);
+        if (message.type === MessageType.OFFSCREEN_STATE && (message.state === TranslatorState.ERROR || message.state === TranslatorState.IDLE)) {
+          const tabId = activeSession.tabId;
+          await saveSession(null);
+          await sendToTab(tabId, { type: MessageType.OFFSCREEN_SETTINGS, settings: { ...settings, enabled: false } });
+        }
       }
       if (message.type === MessageType.OFFSCREEN_STATE || message.type === MessageType.OFFSCREEN_ERROR) {
         const forwarded = { ...message };

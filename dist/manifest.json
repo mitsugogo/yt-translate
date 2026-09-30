@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "YouTube Local Translator",
   "version": "0.5.0",
-  "description": "YouTubeの日本語・英語・インドネシア語音声を端末内で文字起こし・翻訳します。",
+  "description": "YouTubeの日本語・英語・インドネシア語音声を端末内で文字起こし・翻訳し、チャットも翻訳します。",
   "minimum_chrome_version": "138",
   "permissions": [
     "activeTab",
@@ -27,6 +27,33 @@
       "js": [
         "src/content/youtube.js"
       ],
+      "exclude_matches": [
+        "https://www.youtube.com/live_chat*",
+        "https://youtube.com/live_chat*"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/live_chat*",
+        "https://youtube.com/live_chat*"
+      ],
+      "js": [
+        "src/content/chat-author.js"
+      ],
+      "all_frames": true,
+      "world": "MAIN",
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.youtube.com/live_chat*",
+        "https://youtube.com/live_chat*"
+      ],
+      "js": [
+        "src/content/youtube-chat.js"
+      ],
+      "all_frames": true,
       "run_at": "document_idle"
     }
   ]

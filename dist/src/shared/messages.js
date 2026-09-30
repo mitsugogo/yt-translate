@@ -1,5 +1,7 @@
 export const MessageType = Object.freeze({
   CONTENT_READY: "content:ready",
+  CHAT_READY: "chat:ready",
+  CHAT_TRANSLATE: "chat:translate",
   GET_SETTINGS: "settings:get",
   SETTINGS_UPDATED: "settings:updated",
   SET_ENABLED: "settings:set-enabled",

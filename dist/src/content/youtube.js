@@ -4,6 +4,8 @@ const modules = [];
 modules[1] = (() => {
 const MessageType = Object.freeze({
   CONTENT_READY: "content:ready",
+  CHAT_READY: "chat:ready",
+  CHAT_TRANSLATE: "chat:translate",
   GET_SETTINGS: "settings:get",
   SETTINGS_UPDATED: "settings:updated",
   SET_ENABLED: "settings:set-enabled",
@@ -43,6 +45,7 @@ const DEFAULT_SETTINGS = Object.freeze({
   sourceLanguage: "auto",
   autoLanguagePreference: "channel",
   targetLanguage: "ja",
+  translateChat: true,
   useHololiveDictionary: false,
   showOriginal: true,
   showTranslation: true,
@@ -93,6 +96,7 @@ function normalizeSettings(value = {}) {
     sourceLanguage,
     autoLanguagePreference,
     targetLanguage,
+    translateChat: value.translateChat !== false,
     useHololiveDictionary: value.useHololiveDictionary === true,
     showOriginal: value.showOriginal !== false,
     showTranslation: value.showTranslation !== false,

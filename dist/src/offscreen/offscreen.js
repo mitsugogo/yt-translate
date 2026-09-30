@@ -5,6 +5,7 @@ import { MultilingualSpeechRecognizer } from "../speech/multilingual-speech-reco
 import { LocalLanguageDetector } from "../translation/language-detector.js";
 import { MixedLanguageTranslator } from "../translation/mixed-language-translator.js";
 import { TranslationQueue } from "../translation/translation-queue.js";
+import { ChatTranslator } from "../translation/chat-translator.js";
 
 let session = null;
 
@@ -72,6 +73,7 @@ async function stopSession() {
   session = null;
   if (!previous) return;
   previous.queue?.clear();
+  previous.chatTranslator?.close();
   await previous.recognizer?.stop();
   previous.stream?.getTracks?.().forEach((track) => track.stop());
   previous.translator?.reset();
@@ -106,6 +108,7 @@ async function startSession(message) {
     queue: null
   };
   session = current;
+  current.chatTranslator = settings.translateChat ? new ChatTranslator() : null;
 
   const detector = new LocalLanguageDetector({
     onState: (state, detail) => reportState(state, detail),
@@ -170,6 +173,10 @@ async function updateSettings(message) {
     || pageContext.channelMember !== session.pageContext.channelMember;
   const translationChanged = next.sourceLanguage !== session.settings.sourceLanguage
     || next.targetLanguage !== session.settings.targetLanguage;
+  if (next.targetLanguage !== session.settings.targetLanguage || next.translateChat !== session.settings.translateChat) {
+    session.chatTranslator?.close();
+    session.chatTranslator = next.translateChat ? new ChatTranslator() : null;
+  }
   session.settings = next;
   session.pageContext = pageContext;
   session.preferredLanguages = preferredLanguages;
@@ -187,6 +194,14 @@ async function updateSettings(message) {
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
   if (message.target !== "offscreen") return false;
+  if (message.type === MessageType.CHAT_TRANSLATE) {
+    if (!session || !session.settings.enabled || !session.settings.translateChat || session.tabId !== message.tabId || session.videoId !== message.videoId || session.settings.targetLanguage !== message.targetLanguage) {
+      sendResponse({ status: "skipped" });
+      return false;
+    }
+    session.chatTranslator.translate(message).then(sendResponse);
+    return true;
+  }
   if (message.type === MessageType.CHECK_FEATURES) {
     getFeatureReport(normalizeSettings(message.settings)).then((features) => sendResponse({ ok: true, features })).catch((error) => sendResponse({ ok: false, error: error.message }));
     return true;

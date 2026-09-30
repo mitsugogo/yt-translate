@@ -146,6 +146,7 @@ test("popup updates the detected language and clears a failed start state", asyn
   } };
   let receive;
   let resolveSettingsUpdate;
+  let lastSettingsPatch;
   const previousDocument = globalThis.document;
   const previousChrome = globalThis.chrome;
   t.after(() => { globalThis.document = previousDocument; globalThis.chrome = previousChrome; });
@@ -154,7 +155,10 @@ test("popup updates the detected language and clears a failed start state", asyn
     onMessage: { addListener(listener) { receive = listener; } },
     async sendMessage(message) {
       if (message.type === MessageType.GET_POPUP_STATE) return { ok: true, settings: { enabled: true }, session: {}, tab: { id: 7 } };
-      if (message.type === MessageType.SETTINGS_UPDATED) return new Promise((resolve) => { resolveSettingsUpdate = resolve; });
+      if (message.type === MessageType.SETTINGS_UPDATED) {
+        lastSettingsPatch = message.patch;
+        return new Promise((resolve) => { resolveSettingsUpdate = resolve; });
+      }
       return { ok: false, error: "音声認識モデルを利用できません。", settings: { enabled: false } };
     }
   } };
@@ -163,6 +167,15 @@ test("popup updates the detected language and clears a failed start state", asyn
   assert.equal(nodes.get("#status").textContent, "翻訳中・判定中→日本語");
   receive({ type: MessageType.POPUP_LANGUAGE, tabId: 7, detectedLanguage: "en-US" });
   assert.equal(nodes.get("#status").textContent, "翻訳中・英語→日本語");
+  const translateChat = nodes.get("#translateChat");
+  assert.equal(translateChat.checked, true);
+  translateChat.checked = false;
+  const togglingChat = translateChat.listeners.change();
+  assert.equal(lastSettingsPatch.translateChat, false);
+  assert.equal(nodes.get("#progress").hidden, true, "chat toggle does not start speech model preparation");
+  resolveSettingsUpdate({ ok: true, settings: { enabled: true, translateChat: false } });
+  await togglingChat;
+  assert.equal(translateChat.checked, false);
   const sourceLanguage = nodes.get("#sourceLanguage");
   sourceLanguage.value = "id-ID";
   const updating = sourceLanguage.listeners.change();
