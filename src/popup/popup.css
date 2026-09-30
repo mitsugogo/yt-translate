@@ -14,7 +14,9 @@ h1 { margin: 0; font-size: 17px; line-height: 1.2; }
 .settings { display: grid; gap: 10px; padding: 14px 0; border-block: 1px solid rgba(128,128,128,.25); }
 label { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
 select, input[type="range"] { width: 138px; }
-select { padding: 5px 6px; border: 1px solid rgba(128,128,128,.35); border-radius: 6px; background: transparent; color: inherit; }
+select { padding: 5px 6px; border: 1px solid rgba(128,128,128,.35); border-radius: 6px; background: light-dark(#fff, #1b1b1b); color: inherit; }
+select option { background: light-dark(#fff, #1b1b1b); color: light-dark(#181818, #f1f1f1); }
+select option:disabled { color: light-dark(#767676, #aaa); }
 .check { justify-content: flex-start; gap: 8px; }
 .font-size { align-items: center; }
 .font-size input { flex: 1; }
