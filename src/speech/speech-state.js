@@ -25,6 +25,7 @@ export function translationError(code, originalMessage = "", direction = "") {
     pair_unavailable: `${direction || "選択した言語の組み合わせ"} の翻訳を、この端末では利用できません。`,
     model_install_failed: `${direction || "翻訳"} モデルを準備できませんでした。`,
     user_activation: "翻訳モデルの準備にはクリック操作が必要です。拡張機能からモデルの準備を再実行してください。",
+    service_failed: `${direction || "翻訳"}: Chromeの翻訳処理に失敗しました。拡張機能をOFFにしてからONに戻してください。続く場合はChromeを再起動してください。`,
     failed: "翻訳に失敗しました。"
   };
   return {

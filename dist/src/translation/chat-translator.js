@@ -1,5 +1,5 @@
 import { LocalTranslator } from "./translator.js";
-import { shouldSkipChatText } from "../shared/chat-text.js";
+import { normalizeChatDetectionText, shouldSkipChatText } from "../shared/chat-text.js";
 
 export const CHAT_CACHE_LIMIT = 200;
 export const CHAT_AUTHOR_LIMIT = 200;
@@ -93,8 +93,14 @@ export class ChatTranslator {
       .sort((a, b) => b.confidence - a.confidence);
     const best = results[0];
     const margin = (best?.confidence || 0) - (results[1]?.confidence || 0);
+    // Short conversational sentences often score below 0.8. Require multiple
+    // Latin words and a clear lead; isolated words and other scripts keep the
+    // stronger threshold, especially ambiguous Japanese/Chinese Han text.
+    const latinSentence = letters.length >= 6 && letters.every(letter => /\p{Script=Latin}/u.test(letter))
+      && (text.match(/\p{Script=Latin}[\p{Script=Latin}\p{M}\p{N}'’-]*/gu) || []).length >= 2;
+    const minimumConfidence = hanOnly ? 0.95 : latinSentence ? 0.6 : 0.8;
     const reliable = best && (!hanOnly || ["ja", "zh", "zh-Hant"].includes(best.language))
-      && best.confidence >= (hanOnly ? 0.95 : 0.8) && margin >= (hanOnly ? 0.3 : 0.2);
+      && best.confidence >= minimumConfidence && margin >= (hanOnly ? 0.3 : 0.2);
     if (!reliable) {
       putBounded(this.languages, text, null, CHAT_CACHE_LIMIT);
       return hanOnly ? hanHint : null;
@@ -104,13 +110,15 @@ export class ChatTranslator {
     return best.language;
   }
 
-  async translate({ text, authorId = "", targetLanguage }) {
+  async translate({ text, detectionText = text, authorId = "", targetLanguage }) {
     if (this.closed || this.busy) return { status: "skipped" };
     if (typeof text !== "string" || text.length > CHAT_MAX_TEXT_LENGTH || !text.trim()) return { status: "unknown" };
-    if (shouldSkipChatText(text)) return { status: "skipped" };
+    if (typeof detectionText !== "string" || detectionText.length > CHAT_MAX_TEXT_LENGTH) return { status: "unknown" };
+    const prose = normalizeChatDetectionText(detectionText);
+    if (shouldSkipChatText(prose)) return { status: "skipped" };
     this.busy = true;
     try {
-      const sourceLanguage = await this.resolveLanguage(text.trim(), authorId);
+      const sourceLanguage = await this.resolveLanguage(prose, authorId);
       if (this.closed) return { status: "skipped" };
       if (!sourceLanguage) return { status: "unknown" };
       if (sameChatLanguage(sourceLanguage, targetLanguage)) return { status: "same", sourceLanguage };

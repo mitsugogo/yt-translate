@@ -16,10 +16,19 @@ test("defaults auto recognition to the channel preference and supports manual ov
 });
 
 test("supports Japanese speech translated to English", () => {
-  const settings = normalizeSettings({ sourceLanguage: "ja-JP", targetLanguage: "ja" });
+  const settings = normalizeSettings({ sourceLanguage: "ja-JP", targetLanguage: "en" });
   assert.equal(settings.sourceLanguage, "ja-JP");
   assert.equal(settings.targetLanguage, "en");
   assert.equal(formatLanguageDirection(settings.sourceLanguage, settings.targetLanguage), "JA → EN");
+});
+
+test("preserves same-language targets for chat while skipping same-language speech translation", () => {
+  for (const [sourceLanguage, targetLanguage] of [["ja-JP", "ja"], ["en-US", "en"], ["id-ID", "id"]]) {
+    const settings = normalizeSettings({ sourceLanguage, targetLanguage });
+    assert.equal(settings.targetLanguage, targetLanguage);
+    assert.equal(normalizeSettings(settings).targetLanguage, targetLanguage);
+    assert.equal(shouldTranslateSource(settings.sourceLanguage, settings.targetLanguage), false);
+  }
 });
 
 test("formats the popup status with the detected and target languages", () => {

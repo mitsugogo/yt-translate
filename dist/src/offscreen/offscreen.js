@@ -129,7 +129,9 @@ async function startSession(message) {
       if (session !== current) return;
       void send({ type: MessageType.OFFSCREEN_TRANSLATION, tabId: current.tabId, videoId: current.videoId, id, original: text, translated, sourceLanguage, timestamp, isFinal: !isProvisional });
     },
-    onError: ({ error }) => reportError(error, "failed")
+    onError: ({ error }) => {
+      if (session === current && error?.code !== "aborted") reportError(error, "failed");
+    }
   });
   current.recognizer = new MultilingualSpeechRecognizer({
     detector,

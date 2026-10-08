@@ -24,7 +24,7 @@ export function readChatAuthor(renderer) {
 }
 
 function readProse(node) {
-  if (node.tagName === "IMG") return "";
+  if (node.tagName === "IMG") return " ";
   if (node.nodeType === 3) return node.textContent || "";
   return [...(node.childNodes || [])].map(readProse).join("");
 }
@@ -118,8 +118,9 @@ export class ChatTranslationView {
     const message = renderer.querySelector("#message");
     if (!message || renderer.hasAttribute("is-deleted") || this.items.has(renderer)) return;
     const text = readChatText(message);
-    if (!text.trim() || shouldSkipChatText(readProse(message))) return;
-    const state = { renderer, message, text, authorId: readChatAuthor(renderer), visible: false, done: false, inFlight: false, render: null };
+    const detectionText = readProse(message);
+    if (!text.trim() || shouldSkipChatText(detectionText)) return;
+    const state = { renderer, message, text, detectionText, authorId: readChatAuthor(renderer), visible: false, done: false, inFlight: false, render: null };
     this.items.set(renderer, state);
     this.intersections.observe(renderer);
     while (this.items.size > CHAT_TRACKED_LIMIT) {
@@ -193,7 +194,7 @@ export class ChatTranslationView {
     const generation = this.generation;
     try {
       state.authorId = readChatAuthor(state.renderer);
-      const result = await this.request({ text: state.text, authorId: state.authorId, targetLanguage: this.settings.targetLanguage });
+      const result = await this.request({ text: state.text, detectionText: state.detectionText, authorId: state.authorId, targetLanguage: this.settings.targetLanguage });
       if (generation !== this.generation || this.items.get(state.renderer) !== state || !state.renderer.isConnected) return;
       if (readChatText(state.message) !== state.text) return;
       state.done = true;

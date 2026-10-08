@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { bundleContent } from "../scripts/bundle-content.mjs";
 import { ChatTranslationView, CHAT_PENDING_LIMIT, CHAT_TRACKED_LIMIT, readChatAuthor } from "../src/content/chat-translation.js";
 import { FixtureNode, comment, fixture } from "./chat-dom-harness.mjs";
+import { ChatTranslator } from "../src/translation/chat-translator.js";
 
 function harness(comments, request = async () => ({ status: "translated", translated: "翻訳しました" })) {
   const f = fixture();
@@ -66,6 +67,31 @@ test("membership stamps, emojis and laughter never send a translation request", 
   assert.equal(h.timerCount, 0);
   assert.equal(h.calls.length, 0);
   assert.equal(items[0].message.firstChild, stamp);
+});
+
+test("Indonesian prose with membership stamps reaches detection without the stamp names", async () => {
+  const stamp = new FixtureNode("img");
+  stamp.setAttribute("alt", "Membership Smile");
+  const item = comment([new FixtureNode("#text", "alah sengaja ini "), stamp]);
+  const originals = [...item.message.childNodes];
+  const detections = [];
+  const translator = new ChatTranslator({
+    detector: { async detect(text) {
+      detections.push(text);
+      return [{ detectedLanguage: text === "alah sengaja ini" ? "id" : "en", confidence: text === "alah sengaja ini" ? 0.65 : 0.4 }];
+    } },
+    translator: { async translate(text, source) { assert.equal(source, "id"); return "わざとだよ"; } }
+  });
+  const h = harness([item], request => translator.translate(request));
+  h.visible(item.renderer);
+  await h.flushOne();
+  assert.deepEqual(detections, ["alah sengaja ini"]);
+  assert.equal(item.message.textContent, "わざとだよ訳");
+  const render = h.view.items.get(item.renderer).render;
+  render.text.fire("click");
+  assert.deepEqual(render.text.childNodes, originals);
+  h.view.dispose();
+  assert.deepEqual(item.message.childNodes, originals);
 });
 
 test("a busy chat bounds pending work and tracks only a bounded set of renderers", async () => {

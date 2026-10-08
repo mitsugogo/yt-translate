@@ -157,12 +157,17 @@ test("chat frames receive the active session target and route translations throu
   const ready = await h.dispatch({ type: "chat:ready" }, sender);
   assert.equal(ready.settings.enabled, true);
   assert.equal(ready.settings.targetLanguage, "ja");
-  await h.dispatch({ type: "chat:translate", text: "Hello", authorId: "author", targetLanguage: "ja" }, sender);
+  await h.dispatch({ type: "chat:translate", text: "Hello Membership Smile", detectionText: "Hello ", authorId: "author", targetLanguage: "ja" }, sender);
   const forwarded = h.offscreenMessages.find(message => message.type === "chat:translate");
   assert.equal(forwarded.tabId, 17);
   assert.equal(forwarded.videoId, "live-video");
-  assert.equal(forwarded.text, "Hello");
+  assert.equal(forwarded.text, "Hello Membership Smile");
+  assert.equal(forwarded.detectionText, "Hello ");
   assert.equal(forwarded.targetLanguage, "ja");
+  for (const detectionText of [null, 123, "x".repeat(501)]) {
+    assert.equal((await h.dispatch({ type: "chat:translate", text: "Hello", detectionText, targetLanguage: "ja" }, sender)).status, "skipped");
+  }
+  assert.equal(h.offscreenMessages.filter(message => message.type === "chat:translate").length, 1);
 });
 
 test("chat translation ignores other tabs, stale videos and stale targets", async () => {

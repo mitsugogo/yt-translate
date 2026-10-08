@@ -4,6 +4,58 @@ import { readFile } from "node:fs/promises";
 import { ensureSpeechLanguage } from "../src/speech/speech-language.js";
 import { applySpeechPhraseHints, SpeechRecognizer } from "../src/speech/speech-recognizer.js";
 import { MessageType } from "../src/shared/messages.js";
+import { LocalTranslator } from "../src/translation/translator.js";
+
+test("unsupported detected languages never reach Chrome's translation API", async (t) => {
+  const previous = globalThis.Translator;
+  t.after(() => { globalThis.Translator = previous; });
+  const checked = [];
+  globalThis.Translator = {
+    async availability(options) { checked.push(options); return "available"; },
+    async create() { assert.fail("Unsupported languages must not create a model"); }
+  };
+  const translator = new LocalTranslator();
+  for (const source of ["ms", "jv", "su", "la"]) {
+    assert.equal((await translator.checkAvailability(source, "ja")).status, "unavailable", source);
+    await assert.rejects(translator.translate("comment text", source, "ja"), { code: "pair_unavailable" });
+  }
+  assert.equal((await translator.checkAvailability("en", "ms")).status, "unavailable");
+  assert.deepEqual(checked, []);
+});
+
+test("simplified Chinese uses Chrome's zh code while traditional Chinese remains zh-Hant", async (t) => {
+  const previous = globalThis.Translator;
+  t.after(() => { globalThis.Translator = previous; });
+  const checked = [];
+  const created = [];
+  globalThis.Translator = {
+    async availability(options) { checked.push(options); return "available"; },
+    async create(options) { created.push([options.sourceLanguage, options.targetLanguage]); return { async translate() { return "翻訳"; } }; }
+  };
+  const translator = new LocalTranslator();
+  await translator.translate("hello", "en-US", "zh-Hans");
+  await translator.translate("hello", "en", "zh-Hant");
+  assert.deepEqual(checked, [{ sourceLanguage: "en", targetLanguage: "zh" }, { sourceLanguage: "en", targetLanguage: "zh-Hant" }]);
+  assert.deepEqual(created, [["en", "zh"], ["en", "zh-Hant"]]);
+});
+
+test("unavailable native language pairs are checked once until the translator resets", async (t) => {
+  const previous = globalThis.Translator;
+  t.after(() => { globalThis.Translator = previous; });
+  let checks = 0;
+  globalThis.Translator = {
+    async availability() { checks += 1; return "unavailable"; },
+    async create() { assert.fail("Unavailable pairs must not create a model"); }
+  };
+  const translator = new LocalTranslator();
+  for (const text of ["first comment", "second comment"]) {
+    await assert.rejects(translator.translate(text, "id", "ja"), { code: "pair_unavailable" });
+  }
+  assert.equal(checks, 1);
+  translator.reset();
+  await translator.checkAvailability("id", "ja");
+  assert.equal(checks, 2);
+});
 
 test("popup omits the local-processing copy", async () => {
   const [html, script] = await Promise.all([

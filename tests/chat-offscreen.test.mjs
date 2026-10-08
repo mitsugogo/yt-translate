@@ -4,7 +4,7 @@ import { Script } from "node:vm";
 import { fileURLToPath } from "node:url";
 import { bundleContent } from "../scripts/bundle-content.mjs";
 
-async function harness({ onTranslate = text => `訳:${text}` } = {}) {
+async function harness({ onTranslate = text => `訳:${text}`, onDetect = text => [{ detectedLanguage: /\p{Script=Han}/u.test(text) ? "zh" : "en", confidence: 0.99 }] } = {}) {
   const source = await bundleContent(fileURLToPath(new URL("../src/offscreen/offscreen.js", import.meta.url)));
   let receive;
   const calls = [];
@@ -28,7 +28,7 @@ async function harness({ onTranslate = text => `訳:${text}` } = {}) {
     LanguageDetector: {
       async availability() { return "available"; },
       async create() {
-        return { async detect(text) { return [{ detectedLanguage: /\p{Script=Han}/u.test(text) ? "zh" : "en", confidence: 0.99 }]; }, destroy() {} };
+        return { async detect(text) { return onDetect(text); }, destroy() {} };
       }
     },
     chrome: { runtime: {
@@ -57,6 +57,34 @@ test("offscreen chat translates independently of the speech source, and respects
   assert.equal(h.states.some(message => message.type === "translation:result"), false, "chat results do not overwrite the speech panel");
   await h.dispatch({ type: "session:offscreen-stop" });
   assert.equal((await h.translate("hello world")).status, "skipped");
+});
+
+test("Japanese speech with a Japanese target still translates foreign chat", async () => {
+  const h = await harness();
+  h.settings.sourceLanguage = "ja-JP";
+  assert.equal((await h.start()).ok, true);
+  assert.equal((await h.translate("hello world")).translated, "訳:hello world");
+  assert.equal(h.calls[0].sourceLanguage, "en");
+  assert.equal(h.calls[0].targetLanguage, "ja");
+  assert.equal((await h.translate("こんにちは")).status, "same");
+  assert.equal(h.calls.length, 1);
+  await h.dispatch({ type: "session:offscreen-stop" });
+});
+
+test("offscreen detects Indonesian prose separately from membership stamp labels", async () => {
+  const detections = [];
+  const h = await harness({ onDetect: text => {
+    detections.push(text);
+    return [{ detectedLanguage: "id", confidence: 0.65 }, { detectedLanguage: "en", confidence: 0.2 }];
+  } });
+  await h.start();
+  const result = await h.translate("alah sengaja ini Membership Smile", { detectionText: "alah sengaja ini " });
+  assert.equal(result.status, "translated");
+  assert.equal(result.sourceLanguage, "id");
+  assert.deepEqual(detections, ["alah sengaja ini"]);
+  assert.equal(h.calls[0].text, "alah sengaja ini Membership Smile");
+  assert.equal(h.calls[0].sourceLanguage, "id");
+  await h.dispatch({ type: "session:offscreen-stop" });
 });
 
 test("offscreen target changes invalidate pending chat output and use the new shared target", async () => {

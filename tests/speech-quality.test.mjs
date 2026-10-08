@@ -250,6 +250,9 @@ test("the Popup dictionary opt-in controls hints for auto and fixed recognition"
   assert.equal(started.length, 3);
   assert.ok(started.every(r => r.phrases.length > 0));
   assert.ok(started.find(r => r.lang === "ja-JP").phrases.some(p => p.phrase === "ギョリノフ"));
+  for (const phrase of ["AZKi", "メン限", "メンバー限定"]) {
+    assert.equal(started.find(r => r.lang === "ja-JP").phrases.find(p => p.phrase === phrase)?.boost, 7);
+  }
   assert.ok(started.find(r => r.lang === "en-US").phrases.some(p => p.phrase === "Biboo"));
   assert.ok(recognizer.recognizers.every(r => r.settings.preferNativeFinal === true));
   await recognizer.updateSettings({ sourceLanguage: "ja-JP", useHololiveDictionary: true });
@@ -258,6 +261,10 @@ test("the Popup dictionary opt-in controls hints for auto and fixed recognition"
   assert.equal(started.filter(r => !r.aborted).length, 1);
   assert.ok(started.at(-1).phrases.every(p => p.boost > 0 && p.boost <= 10));
   assert.ok(started.at(-1).phrases.some(p => p.boost > 1));
+  await recognizer.updateSettings({ sourceLanguage: "ja-JP", useHololiveDictionary: true, channelMember: "AZKi" });
+  for (const phrase of ["AZKi", "メン限", "メンバー限定"]) {
+    assert.equal(started.at(-1).phrases.find(p => p.phrase === phrase)?.boost, 7);
+  }
   await recognizer.updateSettings({ sourceLanguage: "ja-JP", useHololiveDictionary: true, channelMember: "大神ミオ" });
   assert.equal(started.at(-1).phrases.find(p => p.phrase === "ウチ")?.boost, 6);
   await recognizer.updateSettings({ sourceLanguage: "ja-JP", useHololiveDictionary: true, channelMember: "白上フブキ" });

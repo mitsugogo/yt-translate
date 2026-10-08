@@ -1,5 +1,5 @@
 import { MessageType } from "../shared/messages.js";
-import { DEFAULT_SETTINGS, formatActiveTranslationStatus, formatLanguageDirection, getTargetLanguageForSource, normalizeSettings } from "../shared/settings.js";
+import { DEFAULT_SETTINGS, formatActiveTranslationStatus, formatLanguageDirection, normalizeSettings } from "../shared/settings.js";
 
 const elements = {
   enabled: document.querySelector("#enabled"),
@@ -67,8 +67,7 @@ function applySettings(next) {
 function syncTargetOptions(preferredTarget = elements.targetLanguage.value) {
   const sourceLanguage = elements.sourceLanguage.value.split("-")[0];
   elements.autoLanguagePreference.disabled = sourceLanguage !== "auto";
-  for (const option of elements.targetLanguage.options) option.disabled = sourceLanguage !== "auto" && option.value === sourceLanguage;
-  elements.targetLanguage.value = sourceLanguage !== "auto" && preferredTarget === sourceLanguage ? getTargetLanguageForSource(elements.sourceLanguage.value) : preferredTarget;
+  elements.targetLanguage.value = preferredTarget;
 }
 
 function describeFeatures(features) {

@@ -88,8 +88,7 @@ function normalizeSettings(value = {}) {
   const fontSize = Number(value.fontSize);
   const sourceLanguage = SOURCE_LANGUAGE_VALUES.has(value.sourceLanguage) ? value.sourceLanguage : DEFAULT_SETTINGS.sourceLanguage;
   const autoLanguagePreference = AUTO_LANGUAGE_PREFERENCE_VALUES.has(value.autoLanguagePreference) ? value.autoLanguagePreference : DEFAULT_SETTINGS.autoLanguagePreference;
-  const requestedTarget = TARGET_LANGUAGE_VALUES.has(value.targetLanguage) ? value.targetLanguage : DEFAULT_SETTINGS.targetLanguage;
-  const targetLanguage = toModelLanguage(sourceLanguage) === requestedTarget ? getTargetLanguageForSource(sourceLanguage) : requestedTarget;
+  const targetLanguage = TARGET_LANGUAGE_VALUES.has(value.targetLanguage) ? value.targetLanguage : DEFAULT_SETTINGS.targetLanguage;
   return {
     settingsVersion: 4,
     enabled: value.enabled === true,
@@ -590,6 +589,8 @@ const JAPANESE_TERMS = [
   "ギョリノフ",
   "ホロライブ",
   "ホロメン",
+  "メン限",
+  "メンバー限定",
   "ホロリス",
   "箱推し",
   "ホロックス",
@@ -620,7 +621,7 @@ const JAPANESE_NAME_READINGS = {
   "ロボ子さん": ["ろぼこさん"],
   "さくらみこ": ["さくらみこ"],
   "星街すいせい": ["ほしまちすいせい"],
-  "AZKi": ["あずき"],
+  "AZKi": ["あずき", "アズキ"],
   "アキ・ローゼンタール": ["あきろーぜんたーる"],
   "赤井はあと": ["あかいはあと"],
   "白上フブキ": ["しらかみふぶき", "しらかみ", "白上ふぶき", "シラカミフブキ"],
@@ -788,11 +789,20 @@ function uniquePhrases(entries) {
   });
 }
 
+// 表記を拾いにくい日本語の候補は、チャンネル本人の優先候補よりも強くする。
+const JAPANESE_PRIORITY_BOOSTS = new Map([
+  ["AZKi", 7],
+  ["あずき", 6],
+  ["アズキ", 6],
+  ["メン限", 7],
+  ["メンバー限定", 7],
+]);
+
 function getHololiveSpeechPhrases(language, channelMember = null) {
   const modelLanguage = String(language).split("-")[0].toLowerCase();
   const isJapanese = modelLanguage === "ja";
   const boosts = isJapanese
-    ? { officialNames: 4, callNames: 3, terms: 5 }
+    ? { officialNames: 5, callNames: 4, terms: 6 }
     : { officialNames: 2, callNames: 1, terms: 3 };
   const officialNames = MEMBERS.map(([ja, en]) => (isJapanese ? ja : en));
   const callNames = MEMBERS.flatMap(([, , jaAliases, latinAliases]) =>
@@ -819,7 +829,9 @@ function getHololiveSpeechPhrases(language, channelMember = null) {
     ...phraseEntries(callNames, boosts.callNames),
     ...phraseEntries(nameReadings, boosts.callNames),
     ...phraseEntries(terms, boosts.terms),
-  ]);
+  ]).map((entry) => isJapanese && JAPANESE_PRIORITY_BOOSTS.has(entry.phrase)
+    ? { ...entry, boost: JAPANESE_PRIORITY_BOOSTS.get(entry.phrase) }
+    : entry);
 }
 
 function isKnownHololiveMember(value) {

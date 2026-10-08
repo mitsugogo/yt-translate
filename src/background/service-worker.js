@@ -214,12 +214,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       const enabled = Boolean(isChatFrame && settings.enabled && currentSessionForTab(tabId, videoId));
       if (message.type === MessageType.CHAT_READY) {
         sendResponse({ ok: true, settings: { ...settings, enabled } });
-      } else if (!enabled || !settings.translateChat || typeof message.text !== "string" || message.text.length > 500 || message.targetLanguage !== settings.targetLanguage) {
+      } else if (!enabled || !settings.translateChat || typeof message.text !== "string" || message.text.length > 500
+        || (message.detectionText !== undefined && (typeof message.detectionText !== "string" || message.detectionText.length > 500))
+        || message.targetLanguage !== settings.targetLanguage) {
         sendResponse({ status: "skipped" });
       } else {
         sendResponse(await sendToOffscreen({
           type: MessageType.CHAT_TRANSLATE, tabId, videoId: activeSession.videoId,
-          text: message.text, authorId: typeof message.authorId === "string" ? message.authorId.slice(0, 128) : "",
+          text: message.text, detectionText: message.detectionText, authorId: typeof message.authorId === "string" ? message.authorId.slice(0, 128) : "",
           targetLanguage: settings.targetLanguage
         }));
       }

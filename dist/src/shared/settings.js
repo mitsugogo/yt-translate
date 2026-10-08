@@ -47,8 +47,7 @@ export function normalizeSettings(value = {}) {
   const fontSize = Number(value.fontSize);
   const sourceLanguage = SOURCE_LANGUAGE_VALUES.has(value.sourceLanguage) ? value.sourceLanguage : DEFAULT_SETTINGS.sourceLanguage;
   const autoLanguagePreference = AUTO_LANGUAGE_PREFERENCE_VALUES.has(value.autoLanguagePreference) ? value.autoLanguagePreference : DEFAULT_SETTINGS.autoLanguagePreference;
-  const requestedTarget = TARGET_LANGUAGE_VALUES.has(value.targetLanguage) ? value.targetLanguage : DEFAULT_SETTINGS.targetLanguage;
-  const targetLanguage = toModelLanguage(sourceLanguage) === requestedTarget ? getTargetLanguageForSource(sourceLanguage) : requestedTarget;
+  const targetLanguage = TARGET_LANGUAGE_VALUES.has(value.targetLanguage) ? value.targetLanguage : DEFAULT_SETTINGS.targetLanguage;
   return {
     settingsVersion: 4,
     enabled: value.enabled === true,

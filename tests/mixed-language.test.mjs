@@ -63,15 +63,30 @@ test("provides Hololive names and glossary phrases to local recognition", () => 
     assert.ok(japanese.some(({ phrase }) => phrase === callName), `${callName} should be a Japanese speech hint`);
   }
   assert.ok([...japanese, ...english].every(({ boost }) => boost > 0 && boost <= 10));
-  assert.equal(japanese.find(({ phrase }) => phrase === "さくらみこ")?.boost, 4);
-  assert.equal(japanese.find(({ phrase }) => phrase === "みこち")?.boost, 3);
-  assert.equal(japanese.find(({ phrase }) => phrase === "ギョリノフ")?.boost, 5);
+  assert.equal(japanese.find(({ phrase }) => phrase === "さくらみこ")?.boost, 5);
+  assert.equal(japanese.find(({ phrase }) => phrase === "みこち")?.boost, 4);
+  assert.equal(japanese.find(({ phrase }) => phrase === "ギョリノフ")?.boost, 6);
   for (const phrases of [english, indonesian]) {
     assert.equal(phrases.find(({ phrase }) => phrase === "Sakura Miko")?.boost, 2);
     assert.equal(phrases.find(({ phrase }) => phrase === "Biboo")?.boost, 1);
     assert.equal(phrases.find(({ phrase }) => phrase === "YAGOO")?.boost, 3);
   }
   assert.equal(new Set(japanese.map(({ phrase }) => phrase.toLocaleLowerCase("en-US"))).size, japanese.length);
+});
+
+test("prioritizes Japanese AZKi and membership spellings regardless of the channel owner", () => {
+  for (const channelMember of [null, "AZKi", "大神ミオ"]) {
+    const phrases = getHololiveSpeechPhrases("ja-JP", channelMember);
+    for (const [phrase, boost] of [["AZKi", 7], ["あずき", 6], ["アズキ", 6], ["メン限", 7], ["メンバー限定", 7]]) {
+      assert.deepEqual(phrases.filter(hint => hint.phrase === phrase), [{ phrase, boost }]);
+    }
+  }
+  for (const language of ["en-US", "id-ID"]) {
+    const phrases = getHololiveSpeechPhrases(language);
+    assert.equal(phrases.find(hint => hint.phrase === "AZKi")?.boost, 2);
+    assert.ok(!phrases.some(hint => ["あずき", "アズキ", "メン限", "メンバー限定"].includes(hint.phrase)));
+    assert.equal(getHololiveSpeechPhrases(language, "AZKi").find(hint => hint.phrase === "AZKi")?.boost, 4);
+  }
 });
 
 test("boosts the channel owner's names and self-reference without leaking them to other channels", () => {
@@ -84,7 +99,7 @@ test("boosts the channel owner's names and self-reference without leaking them t
   assert.equal(mio.find(({ phrase }) => phrase === "ウチ")?.boost, 6);
   assert.equal(mio.find(({ phrase }) => phrase === "うち")?.boost, 6);
   assert.equal(mio.find(({ phrase }) => phrase === "白上フブキ")?.boost, 6);
-  assert.equal(mio.find(({ phrase }) => phrase === "フブさん")?.boost, 3);
+  assert.equal(mio.find(({ phrase }) => phrase === "フブさん")?.boost, 4);
   assert.ok(!fubuki.some(({ phrase }) => phrase === "ウチ"));
   assert.ok(!getHololiveSpeechPhrases("ja-JP").some(({ phrase }) => phrase === "ウチ"));
   assert.ok(!otherLanguage.some(({ phrase }) => phrase === "ウチ"));

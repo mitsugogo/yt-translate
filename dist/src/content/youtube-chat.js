@@ -42,6 +42,12 @@ modules[3] = (() => {
 // Match whole reactions only; a sentence containing laughter still translates.
 const LAUGHTER = /^(?:(?:w+|ｗ+|笑+|草+|大草原|爆笑|哈{2,}|呵{2,}|嘻{2,}|lol|lmao|lmfao|rofl|(?:ha){2,}h?|(?:he){2,}|(?:ja){2,}|(?:wk){2,}|k{3,}|[ㅋㅎ]+)[\s\p{P}\p{S}]*)+$/iu;
 
+function normalizeChatDetectionText(text) {
+  return text.replace(/:[\w+-]+:/gu, " ")
+    .replace(/[\p{S}\u200d\ufe0e\ufe0f]/gu, " ")
+    .replace(/\s+/gu, " ").trim();
+}
+
 function shouldSkipChatText(text) {
   const trimmed = String(text || "").trim();
   if (!/\p{L}/u.test(trimmed)) return true;
@@ -52,7 +58,7 @@ function shouldSkipChatText(text) {
   return LAUGHTER.test(reaction);
 }
 
-return { shouldSkipChatText };
+return { normalizeChatDetectionText, shouldSkipChatText };
 })();
 modules[2] = (() => {
 const { shouldSkipChatText } = modules[3];
@@ -80,7 +86,7 @@ function readChatAuthor(renderer) {
 }
 
 function readProse(node) {
-  if (node.tagName === "IMG") return "";
+  if (node.tagName === "IMG") return " ";
   if (node.nodeType === 3) return node.textContent || "";
   return [...(node.childNodes || [])].map(readProse).join("");
 }
@@ -174,8 +180,9 @@ class ChatTranslationView {
     const message = renderer.querySelector("#message");
     if (!message || renderer.hasAttribute("is-deleted") || this.items.has(renderer)) return;
     const text = readChatText(message);
-    if (!text.trim() || shouldSkipChatText(readProse(message))) return;
-    const state = { renderer, message, text, authorId: readChatAuthor(renderer), visible: false, done: false, inFlight: false, render: null };
+    const detectionText = readProse(message);
+    if (!text.trim() || shouldSkipChatText(detectionText)) return;
+    const state = { renderer, message, text, detectionText, authorId: readChatAuthor(renderer), visible: false, done: false, inFlight: false, render: null };
     this.items.set(renderer, state);
     this.intersections.observe(renderer);
     while (this.items.size > CHAT_TRACKED_LIMIT) {
@@ -249,7 +256,7 @@ class ChatTranslationView {
     const generation = this.generation;
     try {
       state.authorId = readChatAuthor(state.renderer);
-      const result = await this.request({ text: state.text, authorId: state.authorId, targetLanguage: this.settings.targetLanguage });
+      const result = await this.request({ text: state.text, detectionText: state.detectionText, authorId: state.authorId, targetLanguage: this.settings.targetLanguage });
       if (generation !== this.generation || this.items.get(state.renderer) !== state || !state.renderer.isConnected) return;
       if (readChatText(state.message) !== state.text) return;
       state.done = true;

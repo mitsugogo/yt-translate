@@ -36,6 +36,37 @@ test("Japanese and unknown comments stay unchanged while English uses the shared
   assert.deepEqual(h.translations, [["Thank you", "en", "ja"], ["Good morning", "en", "ko"]]);
 });
 
+test("short Indonesian sentences translate with a clear lead at moderate confidence", async () => {
+  const h = harness({ results: [{ detectedLanguage: "id", confidence: 0.65 }, { detectedLanguage: "en", confidence: 0.2 }] });
+  for (const text of ["jangan nyasar yop", "alah sengaja ini", "jaga2, buat future yopi. sapa tau lagu ini rawan kopi kanan"]) {
+    assert.equal((await h.translate(text)).sourceLanguage, "id", text);
+  }
+  assert.equal(h.translations.length, 3);
+  assert.ok(h.translations.every(([, source, target]) => source === "id" && target === "ja"));
+  assert.equal((await h.translate("Encoru")).status, "unknown", "a single uncertain word still needs stronger evidence");
+});
+
+test("moderate confidence does not translate conflicting candidates or relax Han-only detection", async () => {
+  for (const results of [
+    [{ detectedLanguage: "id", confidence: 0.65 }, { detectedLanguage: "ms", confidence: 0.55 }],
+    [{ detectedLanguage: "id", confidence: 0.59 }, { detectedLanguage: "en", confidence: 0.1 }]
+  ]) {
+    const h = harness({ results });
+    assert.equal((await h.translate("jangan nyasar yop")).status, "unknown");
+    assert.equal(h.translations.length, 0);
+  }
+  const h = harness({ results: [{ detectedLanguage: "zh", confidence: 0.9 }] });
+  assert.equal((await h.translate("今天的直播真的非常精彩")).status, "unknown");
+});
+
+test("emote names and emojis are excluded from detection but retained in translation input", async () => {
+  const h = harness({ results: text => [{ detectedLanguage: text === "alah sengaja ini" ? "id" : "en", confidence: 0.99 }] });
+  assert.equal((await h.translate("alah sengaja ini :iofi_cheer: 😂")).sourceLanguage, "id");
+  assert.equal((await h.translate("alah sengaja ini 🎉")).sourceLanguage, "id");
+  assert.deepEqual(h.detections, ["alah sengaja ini"]);
+  assert.deepEqual(h.translations.map(([text]) => text), ["alah sengaja ini :iofi_cheer: 😂", "alah sengaja ini 🎉"]);
+});
+
 test("short Han-only comments require a recent hint from that same author", async () => {
   let time = 0;
   const h = harness({ now: () => time, results: [{ detectedLanguage: "zh-Hant", confidence: 0.99 }] });
