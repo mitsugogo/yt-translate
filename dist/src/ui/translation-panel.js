@@ -44,6 +44,8 @@ export class TranslationPanel {
     this.host = null;
     this.root = null;
     this.state = TranslatorState.IDLE;
+    this.errorScope = null;
+    this.featureWarning = "";
     this.features = null;
     this.settings = null;
     this.currentTranscriptId = null;
@@ -121,13 +123,21 @@ export class TranslationPanel {
     const unsupported = [];
     if (!features.speech?.local || features.speech?.status === "unavailable") unsupported.push(features.speech?.message || "この環境では端末内の音声認識を利用できません。");
     if (!features.translator?.supported || features.translator?.status === "unavailable") unsupported.push(features.translator?.message || "この環境ではChromeの翻訳機能を利用できません。");
-    this.setWarning(unsupported.join(" "));
+    this.featureWarning = unsupported.join(" ");
+    if (!this.errorScope) this.setWarning(this.featureWarning);
   }
 
-  setState(state, detail = "", progress = null) {
+  setState(state, detail = "", progress = null, scope) {
+    // Speech recovery does not imply that a failed translation has recovered.
+    if ((state === TranslatorState.LISTENING || state === TranslatorState.INITIALIZING) && scope && this.errorScope
+      && this.errorScope !== "pipeline" && this.errorScope !== scope) return;
     if (state === TranslatorState.DOWNLOADING
       && (this.state === TranslatorState.LISTENING || this.state === TranslatorState.ERROR)) return;
     this.state = state;
+    if (state === TranslatorState.LISTENING || state === TranslatorState.INITIALIZING) {
+      this.errorScope = null;
+      this.setWarning(this.featureWarning);
+    }
     if (!this.root) return;
     const dot = this.root.querySelector('[data-role="dot"]');
     dot.classList.toggle("listening", state === TranslatorState.LISTENING);
@@ -196,7 +206,8 @@ export class TranslationPanel {
     warning.hidden = !message;
   }
 
-  setError(message) {
+  setError(message, scope = "pipeline") {
+    this.errorScope = scope;
     this.setState(TranslatorState.ERROR, message);
     this.setWarning(message);
   }

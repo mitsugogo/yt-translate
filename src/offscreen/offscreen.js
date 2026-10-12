@@ -13,7 +13,7 @@ function send(message) {
   return chrome.runtime.sendMessage(message).catch(() => undefined);
 }
 
-function sendState({ tabId, videoId, state, detail = "", progress = null }) {
+function sendState({ tabId, videoId, state, detail = "", progress = null, scope }) {
   const message = {
     type: MessageType.OFFSCREEN_STATE,
     tabId,
@@ -21,16 +21,17 @@ function sendState({ tabId, videoId, state, detail = "", progress = null }) {
     state,
     detail
   };
+  if (scope) message.scope = scope;
   if (Number.isFinite(progress)) message.progress = Math.min(1, Math.max(0, progress));
   void send(message);
 }
 
-function reportState(state, detail = "", progress = null) {
+function reportState(state, detail = "", progress = null, scope) {
   if (!session) return;
-  sendState({ tabId: session.tabId, videoId: session.videoId, state, detail, progress });
+  sendState({ tabId: session.tabId, videoId: session.videoId, state, detail, progress, scope });
 }
 
-function reportError(error, fallbackCode = "failed") {
+function reportError(error, fallbackCode = "failed", scope = "translation") {
   const code = error?.code || fallbackCode;
   const message = error?.message || "音声認識・翻訳処理に失敗しました。";
   if (session) {
@@ -39,6 +40,7 @@ function reportError(error, fallbackCode = "failed") {
       tabId: session.tabId,
       videoId: session.videoId,
       code,
+      scope,
       message
     });
   }
@@ -111,13 +113,13 @@ async function startSession(message) {
   current.chatTranslator = settings.translateChat ? new ChatTranslator() : null;
 
   const detector = new LocalLanguageDetector({
-    onState: (state, detail) => reportState(state, detail),
-    onProgress: (progress, detail) => reportState(TranslatorState.DOWNLOADING, `${detail} ${Math.round(progress * 100)}%`, progress)
+    onState: (state, detail) => reportState(state, detail, null, "translation"),
+    onProgress: (progress, detail) => reportState(TranslatorState.DOWNLOADING, `${detail} ${Math.round(progress * 100)}%`, progress, "translation")
   });
   current.translator = new MixedLanguageTranslator({
     detector,
-    onState: (state, detail) => reportState(state, detail),
-    onProgress: (progress, detail) => reportState(TranslatorState.DOWNLOADING, `${detail} ${Math.round(progress * 100)}%`, progress)
+    onState: (state, detail) => reportState(state, detail, null, "translation"),
+    onProgress: (progress, detail) => reportState(TranslatorState.DOWNLOADING, `${detail} ${Math.round(progress * 100)}%`, progress, "translation")
   });
   current.queue = new TranslationQueue({
     translator: {
@@ -135,7 +137,9 @@ async function startSession(message) {
   });
   current.recognizer = new MultilingualSpeechRecognizer({
     detector,
-    onState: (state, detail) => reportState(state, detail),
+    onState: (state, detail) => {
+      if (session === current) reportState(state, detail, null, "speech");
+    },
     onInterim: ({ text, sourceLanguage, timestamp }) => {
       if (session !== current) return;
       void send({ type: MessageType.OFFSCREEN_TRANSCRIPT, tabId: current.tabId, videoId: current.videoId, id: "interim", original: text, sourceLanguage, isFinal: false, timestamp });
@@ -147,7 +151,9 @@ async function startSession(message) {
       void send({ type: MessageType.OFFSCREEN_TRANSCRIPT, tabId: current.tabId, videoId: current.videoId, id, original: text, sourceLanguage, isFinal: !isProvisional, willTranslate, timestamp });
       if (willTranslate) current.queue.enqueue({ id, text, sourceLanguage, timestamp, isProvisional });
     },
-    onError: (error) => reportError(error, "start_failed")
+    onError: (error) => {
+      if (session === current) reportError(error, "start_failed", "speech");
+    }
   });
 
   reportState(TranslatorState.INITIALIZING);

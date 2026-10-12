@@ -129,6 +129,32 @@ test("panel stays hidden while disabled and follows popup settings", async () =>
   assert.equal(harness.status().hostRemoved, true);
 });
 
+test("speech recovery clears the panel error and returns the status to translating", async () => {
+  const { receive, fields } = await createContentHarness();
+  receive({ type: "pipeline:error", videoId: "example", scope: "speech", message: "音声認識を開始できませんでした。" });
+  assert.equal(fields.get('[data-role="state"]').textContent, "エラー");
+  receive({ type: "session:state", videoId: "example", scope: "speech", state: "listening" });
+  receive({ type: "transcript:result", videoId: "example", original: "今日もおはようございます", sourceLanguage: "ja-JP", isFinal: false });
+  assert.equal(fields.get('[data-role="state"]').textContent, "翻訳中");
+  assert.equal(fields.get('[data-role="warning"]').hidden, true);
+  assert.equal(fields.get('[data-role="warning"]').textContent, "");
+  assert.equal(fields.get('[data-role="original"]').textContent, "今日もおはようございます");
+});
+
+test("recovery clears only the error from the recovered operation", async () => {
+  const { receive, fields } = await createContentHarness();
+  for (const [failed, recovered] of [["translation", "speech"], ["speech", "translation"]]) {
+    receive({ type: "pipeline:error", videoId: "example", scope: failed, message: "処理に失敗しました" });
+    receive({ type: "session:state", videoId: "example", scope: recovered, state: "initializing" });
+    receive({ type: "session:state", videoId: "example", scope: recovered, state: "listening" });
+    assert.equal(fields.get('[data-role="state"]').textContent, "エラー");
+    assert.equal(fields.get('[data-role="warning"]').hidden, false);
+    receive({ type: "session:state", videoId: "example", scope: failed, state: "listening" });
+    assert.equal(fields.get('[data-role="state"]').textContent, "翻訳中");
+    assert.equal(fields.get('[data-role="warning"]').hidden, true);
+  }
+});
+
 test("early translated chunks retain their provisional status in the panel", async () => {
   const { receive, fields } = await createContentHarness();
   receive({ type: "transcript:result", videoId: "example", id: "early-1", original: "早めに表示する部分", isFinal: false });

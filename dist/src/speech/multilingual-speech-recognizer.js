@@ -116,6 +116,7 @@ export class MultilingualSpeechRecognizer {
     this.pendingInterimSwitch = null;
     this.sessionLanguageLearner = new SessionLanguageLearner();
     this.generation = 0;
+    this.state = TranslatorState.IDLE;
   }
 
   async start(stream, settings = this.settings, { preserveSessionLearning = false } = {}) {
@@ -123,6 +124,9 @@ export class MultilingualSpeechRecognizer {
     this.settings = settings;
     this.stream = stream;
     const languages = getSpeechLanguagesForSource(settings.sourceLanguage);
+    const generation = this.generation;
+    let starting = true;
+    this.state = TranslatorState.INITIALIZING;
     this.onState?.(TranslatorState.INITIALIZING);
     await ensureSpeechLanguages({
       languages,
@@ -131,10 +135,20 @@ export class MultilingualSpeechRecognizer {
     this.recognizers = languages.map((language, index) => new SpeechRecognizer({
       manageAudioOutput: index === 0,
       stopStream: false,
-      onInterim: (candidate) => this.handleInterim(candidate),
-      onFinal: (candidate) => this.handleFinal(candidate),
-      onState: () => {},
-      onError: (error) => this.onError?.({ ...error, sourceLanguage: language })
+      onInterim: (candidate) => {
+        if (generation === this.generation) this.handleInterim(candidate);
+      },
+      onFinal: (candidate) => {
+        if (generation === this.generation) this.handleFinal(candidate);
+      },
+      onState: (state) => {
+        if (generation === this.generation && !starting && state === TranslatorState.LISTENING) this.reportListening();
+      },
+      onError: (error) => {
+        if (generation !== this.generation) return;
+        this.state = TranslatorState.ERROR;
+        this.onError?.({ ...error, sourceLanguage: language });
+      }
     }));
     try {
       await Promise.all(this.recognizers.map((recognizer, index) => recognizer.start(stream, {
@@ -148,18 +162,28 @@ export class MultilingualSpeechRecognizer {
         // phrases written for its own model language.
         phraseHints: settings.useHololiveDictionary ? getHololiveSpeechPhrases(languages[index], settings.channelMember) : []
       })));
-      this.onState?.(TranslatorState.LISTENING);
+      starting = false;
+      if (generation === this.generation) this.reportListening();
     } catch (error) {
       await this.stop();
       throw error;
     }
   }
 
+  reportListening() {
+    if (this.state === TranslatorState.LISTENING) return;
+    this.state = TranslatorState.LISTENING;
+    this.onState?.(TranslatorState.LISTENING);
+  }
+
   handleInterim(candidate) {
     // A fixed language already has exactly one recognizer. Forward its results
     // without auto-language scoring, competing hypotheses or display hysteresis.
     if (this.settings.sourceLanguage !== "auto") {
-      if (isUsableSpeechCandidate(candidate)) this.onInterim?.(candidate);
+      if (isUsableSpeechCandidate(candidate)) {
+        this.reportListening();
+        this.onInterim?.(candidate);
+      }
       return;
     }
     const now = performance.now();
@@ -206,6 +230,7 @@ export class MultilingualSpeechRecognizer {
     // An event from a losing recognizer must not replay a stored old hypothesis.
     if (chosen !== candidate) return;
     this.adoptDisplayedCandidate(chosen, now);
+    this.reportListening();
     this.onInterim?.(chosen);
   }
 
@@ -225,7 +250,10 @@ export class MultilingualSpeechRecognizer {
 
   handleFinal(candidate) {
     if (this.settings.sourceLanguage !== "auto") {
-      if (isUsableSpeechCandidate(candidate)) this.onFinal?.(candidate);
+      if (isUsableSpeechCandidate(candidate)) {
+        this.reportListening();
+        this.onFinal?.(candidate);
+      }
       return;
     }
     const language = toModelLanguage(candidate.sourceLanguage);
@@ -273,6 +301,7 @@ export class MultilingualSpeechRecognizer {
         && now - this.displayedAt < FINAL_LANGUAGE_SWITCH_GUARD_MS) return;
       if (this.settings.sourceLanguage === "auto") this.sessionLanguageLearner.observe(chosen);
       this.adoptDisplayedCandidate(chosen, now);
+      this.reportListening();
       for (const chunk of chunksByLanguage.get(chosen.sourceLanguage) || [chosen]) this.onFinal?.(chunk);
     }
   }
@@ -290,6 +319,7 @@ export class MultilingualSpeechRecognizer {
 
   async stop({ preserveSessionLearning = false } = {}) {
     this.generation += 1;
+    this.state = TranslatorState.IDLE;
     if (this.finalTimer) clearTimeout(this.finalTimer);
     if (this.interimTimer) clearTimeout(this.interimTimer);
     this.finalTimer = null;

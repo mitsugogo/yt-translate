@@ -10,6 +10,7 @@ async function harness(initialSettings) {
   const source = await bundleContent(fileURLToPath(new URL("../src/popup/popup.js", import.meta.url)));
   const nodes = new Map();
   const patches = [];
+  let receive;
   let settings = normalizeSettings(initialSettings);
   new Script(source).runInNewContext({
     document: { querySelector(id) {
@@ -22,7 +23,7 @@ async function harness(initialSettings) {
       return nodes.get(id);
     } },
     chrome: { runtime: {
-      onMessage: { addListener() {} },
+      onMessage: { addListener(listener) { receive = listener; } },
       async sendMessage(message) {
         if (message.type === MessageType.SETTINGS_UPDATED) {
           patches.push(message.patch);
@@ -33,7 +34,7 @@ async function harness(initialSettings) {
     } }
   });
   await new Promise(setImmediate);
-  return { nodes, patches };
+  return { nodes, patches, receive };
 }
 
 test("popup loads a Japanese speech and Japanese target setting without disabling it", async () => {
@@ -42,6 +43,21 @@ test("popup loads a Japanese speech and Japanese target setting without disablin
   assert.equal(target.value, "ja");
   assert.equal(target.options.find(option => option.value === "ja").disabled, false);
   assert.equal(h.nodes.get("#autoLanguagePreference").disabled, true);
+});
+
+test("popup clears a recovered speech error while preserving an unrelated error", async () => {
+  const h = await harness({ enabled: true, sourceLanguage: "ja-JP", targetLanguage: "ja" });
+  for (const [failed, recovered] of [["speech", "translation"], ["translation", "speech"]]) {
+    h.receive({ type: MessageType.OFFSCREEN_ERROR, scope: failed, message: "処理に失敗しました" });
+    const errorStatus = h.nodes.get("#status").textContent;
+    h.receive({ type: MessageType.OFFSCREEN_STATE, scope: recovered, state: "listening" });
+    assert.equal(h.nodes.get("#error").hidden, false);
+    assert.equal(h.nodes.get("#status").textContent, errorStatus);
+    h.receive({ type: MessageType.OFFSCREEN_STATE, scope: failed, state: "listening" });
+    assert.equal(h.nodes.get("#error").hidden, true);
+    assert.equal(h.nodes.get("#error").textContent, "");
+    assert.equal(h.nodes.get("#status").textContent, "翻訳中・日本語→日本語");
+  }
 });
 
 test("popup keeps the target when speech changes and saves matching targets", async () => {

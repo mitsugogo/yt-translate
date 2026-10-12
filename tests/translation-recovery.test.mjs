@@ -249,11 +249,73 @@ async function speechHarness(create) {
     } }
   });
   const dispatch = message => new Promise(resolve => receive({ ...message, target: "offscreen" }, {}, resolve));
-  const start = () => dispatch({ type: "session:start-capture", tabId: 17, videoId: "video", streamId: "stream", settings: { enabled: true, sourceLanguage: "en-US", targetLanguage: "ja", translateChat: false } });
+  const start = (settings = {}) => dispatch({ type: "session:start-capture", tabId: 17, videoId: "video", streamId: "stream", settings: { enabled: true, sourceLanguage: "en-US", targetLanguage: "ja", translateChat: false, ...settings } });
   const stop = () => dispatch({ type: "session:offscreen-stop" });
   const utterance = text => recognizers.at(-1).onresult({ resultIndex: 0, results: [{ 0: { transcript: text, confidence: 1 }, isFinal: true }] });
-  return { start, stop, utterance, messages };
+  return { start, stop, utterance, messages, recognizers };
 }
+
+test("a restarted speech recognizer reports recovery before receiving another transcript", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const h = await speechHarness(async () => ({ async translate() { return "翻訳"; }, destroy() {} }));
+  t.after(() => h.stop());
+  await h.start();
+  const recognition = h.recognizers.at(-1);
+  recognition.onerror({ error: "network" });
+  const failure = h.messages.at(-1);
+  assert.equal(failure.type, MessageType.OFFSCREEN_ERROR);
+  assert.equal(failure.scope, "speech");
+  recognition.onend();
+  t.mock.timers.tick(500);
+  await Promise.resolve();
+  assert.equal(h.recognizers.length, 2);
+  assert.equal(h.messages.at(-1).state, "listening");
+  assert.equal(h.messages.at(-1).scope, "speech");
+  const count = h.messages.length;
+  recognition.onerror({ error: "network" });
+  recognition.onstart();
+  assert.equal(h.messages.length, count, "late events from the old instance cannot overwrite recovery");
+});
+
+test("a healthy auto-language transcript recovers a competing recognizer's error", async (t) => {
+  const h = await speechHarness(async () => ({ async translate() { return "翻訳"; }, destroy() {} }));
+  t.after(() => h.stop());
+  await h.start({ sourceLanguage: "auto" });
+  h.recognizers.find(recognition => recognition.lang === "en-US").onerror({ error: "network" });
+  assert.equal(h.messages.at(-1).scope, "speech");
+  const japanese = h.recognizers.find(recognition => recognition.lang === "ja-JP");
+  const errorCount = h.messages.length;
+  japanese.onresult({ resultIndex: 0, results: [{ 0: { transcript: "", confidence: 1 }, isFinal: false }] });
+  assert.equal(h.messages.length, errorCount, "an empty result is not evidence of recovery");
+  japanese.onresult({ resultIndex: 0, results: [{ 0: { transcript: "今日もおはようございます", confidence: 1 }, isFinal: false }] });
+  const recovery = h.messages.at(-2);
+  assert.equal(recovery.type, MessageType.OFFSCREEN_STATE);
+  assert.equal(recovery.state, "listening");
+  assert.equal(recovery.scope, "speech");
+  assert.equal(h.messages.at(-1).type, MessageType.OFFSCREEN_TRANSCRIPT);
+  assert.equal(h.messages.at(-1).original, "今日もおはようございます");
+  const count = h.messages.length;
+  japanese.onresult({ resultIndex: 0, results: [{ 0: { transcript: "今日もおはようございます皆さん", confidence: 1 }, isFinal: false }] });
+  assert.equal(h.messages.length, count + 1, "normal transcripts do not repeat state notifications");
+  await h.stop();
+  const stoppedCount = h.messages.length;
+  japanese.onerror({ error: "network" });
+  japanese.onstart();
+  assert.equal(h.messages.length, stoppedCount);
+});
+
+test("a fixed-language final transcript reports speech recovery without waiting for translation", async (t) => {
+  const h = await speechHarness(async () => ({ async translate() { assert.fail("Matching source and target need no translation"); }, destroy() {} }));
+  t.after(() => h.stop());
+  await h.start({ sourceLanguage: "ja-JP" });
+  const recognition = h.recognizers.at(-1);
+  recognition.onerror({ error: "network" });
+  h.utterance("今日もおはようございます");
+  assert.equal(h.messages.at(-2).state, "listening");
+  assert.equal(h.messages.at(-2).scope, "speech");
+  assert.equal(h.messages.at(-1).type, MessageType.OFFSCREEN_TRANSCRIPT);
+  assert.equal(h.messages.at(-1).willTranslate, false);
+});
 
 test("starting audio translation recovers the first native failure and sends the translated result", async () => {
   let created = 0;

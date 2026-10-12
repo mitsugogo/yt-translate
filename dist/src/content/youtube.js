@@ -1033,6 +1033,8 @@ class TranslationPanel {
     this.host = null;
     this.root = null;
     this.state = TranslatorState.IDLE;
+    this.errorScope = null;
+    this.featureWarning = "";
     this.features = null;
     this.settings = null;
     this.currentTranscriptId = null;
@@ -1110,13 +1112,21 @@ class TranslationPanel {
     const unsupported = [];
     if (!features.speech?.local || features.speech?.status === "unavailable") unsupported.push(features.speech?.message || "この環境では端末内の音声認識を利用できません。");
     if (!features.translator?.supported || features.translator?.status === "unavailable") unsupported.push(features.translator?.message || "この環境ではChromeの翻訳機能を利用できません。");
-    this.setWarning(unsupported.join(" "));
+    this.featureWarning = unsupported.join(" ");
+    if (!this.errorScope) this.setWarning(this.featureWarning);
   }
 
-  setState(state, detail = "", progress = null) {
+  setState(state, detail = "", progress = null, scope) {
+    // Speech recovery does not imply that a failed translation has recovered.
+    if ((state === TranslatorState.LISTENING || state === TranslatorState.INITIALIZING) && scope && this.errorScope
+      && this.errorScope !== "pipeline" && this.errorScope !== scope) return;
     if (state === TranslatorState.DOWNLOADING
       && (this.state === TranslatorState.LISTENING || this.state === TranslatorState.ERROR)) return;
     this.state = state;
+    if (state === TranslatorState.LISTENING || state === TranslatorState.INITIALIZING) {
+      this.errorScope = null;
+      this.setWarning(this.featureWarning);
+    }
     if (!this.root) return;
     const dot = this.root.querySelector('[data-role="dot"]');
     dot.classList.toggle("listening", state === TranslatorState.LISTENING);
@@ -1185,7 +1195,8 @@ class TranslationPanel {
     warning.hidden = !message;
   }
 
-  setError(message) {
+  setError(message, scope = "pipeline") {
+    this.errorScope = scope;
     this.setState(TranslatorState.ERROR, message);
     this.setWarning(message);
   }
@@ -1358,7 +1369,7 @@ function handleRuntimeMessage(message, _sender, sendResponse) {
     return;
   }
   if ([MessageType.OFFSCREEN_STATE, MessageType.OFFSCREEN_TRANSCRIPT, MessageType.OFFSCREEN_TRANSLATION, MessageType.OFFSCREEN_ERROR].includes(message.type) && message.videoId && message.videoId !== currentVideoId) return;
-  if (message.type === MessageType.OFFSCREEN_STATE) panel?.setState(message.state, message.detail, message.progress);
+  if (message.type === MessageType.OFFSCREEN_STATE) panel?.setState(message.state, message.detail, message.progress, message.scope);
   if (message.type === MessageType.OFFSCREEN_TRANSCRIPT) {
     const willTranslate = typeof message.willTranslate === "boolean"
       ? message.willTranslate
@@ -1368,7 +1379,7 @@ function handleRuntimeMessage(message, _sender, sendResponse) {
   if (message.type === MessageType.OFFSCREEN_TRANSLATION) {
     panel?.setTranslationResult(message.original, message.translated, message.id, message.isFinal !== false);
   }
-  if (message.type === MessageType.OFFSCREEN_ERROR) panel?.setError(message.message || "音声認識・翻訳処理に失敗しました。");
+  if (message.type === MessageType.OFFSCREEN_ERROR) panel?.setError(message.message || "音声認識・翻訳処理に失敗しました。", message.scope);
 }
 
 if (hasValidExtensionContext()) chrome.runtime.onMessage.addListener(handleRuntimeMessage);

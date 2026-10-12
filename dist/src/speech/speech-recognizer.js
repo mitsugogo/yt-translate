@@ -163,6 +163,7 @@ export class SpeechRecognizer {
     };
 
     recognition.onerror = (event) => {
+      if (!this.shouldRun || this.recognition !== recognition) return;
       if (event.error === "aborted" && !this.shouldRun) return;
       if (event.error === "no-speech") {
         this.onState?.(TranslatorState.PAUSED);
@@ -174,6 +175,7 @@ export class SpeechRecognizer {
     };
 
     recognition.onstart = () => {
+      if (!this.shouldRun || this.recognition !== recognition) return;
       this.restartAttempt = 0;
       this.onState?.(TranslatorState.LISTENING);
     };

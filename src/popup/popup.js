@@ -24,12 +24,14 @@ let settings = DEFAULT_SETTINGS;
 let detectedLanguage = null;
 let popupTabId = null;
 let pipelineState = "idle";
+let errorScope = null;
 
 function send(message) {
   return chrome.runtime.sendMessage(message).catch((error) => ({ ok: false, error: error.message }));
 }
 
-function setError(message = "") {
+function setError(message = "", scope = "pipeline") {
+  errorScope = message ? scope : null;
   elements.error.textContent = message;
   elements.error.hidden = !message;
   if (message) {
@@ -102,19 +104,27 @@ async function refresh() {
 
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === MessageType.OFFSCREEN_STATE) {
+    if ((message.state === "listening" || message.state === "initializing") && message.scope && errorScope
+      && errorScope !== "pipeline" && errorScope !== message.scope) return;
     if (message.state === "downloading" && (pipelineState === "listening" || pipelineState === "error")) return;
     pipelineState = message.state;
     if (message.state === "downloading" && elements.error.hidden) setProgress(message.progress, true, message.detail);
     else if (message.state === "listening" || message.state === "idle" || message.state === "error") {
       setProgress(null, false);
-      if (message.state === "listening") showActiveStatus(message.detectedLanguage || detectedLanguage);
+      if (message.state === "listening") {
+        setError();
+        showActiveStatus(message.detectedLanguage || detectedLanguage);
+      }
     }
   }
-  if (message.type === MessageType.POPUP_LANGUAGE && message.tabId === popupTabId) showActiveStatus(message.detectedLanguage);
+  if (message.type === MessageType.POPUP_LANGUAGE && message.tabId === popupTabId) {
+    detectedLanguage = message.detectedLanguage;
+    if (!errorScope) showActiveStatus();
+  }
   if (message.type === MessageType.OFFSCREEN_ERROR) {
     pipelineState = "error";
     setProgress(null, false);
-    setError(message.message || "音声認識・翻訳処理に失敗しました。");
+    setError(message.message || "音声認識・翻訳処理に失敗しました。", message.scope);
   }
 });
 
